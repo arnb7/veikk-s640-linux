@@ -60,6 +60,62 @@ class VeikkDriverDaemon:
         self._ep_out: Optional[usb.core.Endpoint] = None
         self._detached_interfaces = []
 
+        # Automatic live configuration watcher state
+        self._last_config_check: float = 0.0
+        self._config_mtimes: dict[str, float] = {}
+        self._record_config_mtimes()
+
+    def _record_config_mtimes(self):
+        """Record modification timestamps of discovered config files and reload triggers."""
+        self._config_mtimes.clear()
+        from .config import get_config_search_paths
+        for p in get_config_search_paths():
+            try:
+                if os.path.isfile(p):
+                    self._config_mtimes[p] = os.path.getmtime(p)
+            except Exception:
+                pass
+        for trig in ("/tmp/veikk-reload", "/run/veikk-reload"):
+            try:
+                if os.path.isfile(trig):
+                    self._config_mtimes[trig] = os.path.getmtime(trig)
+            except Exception:
+                pass
+
+    def check_config_reload(self, now: float):
+        """Check if any configuration file or trigger was updated. Runs in main loop."""
+        if now - self._last_config_check < 0.25:
+            return
+        self._last_config_check = now
+
+        reload_needed = False
+        from .config import get_config_search_paths
+        for p in get_config_search_paths():
+            try:
+                if os.path.isfile(p):
+                    mtime = os.path.getmtime(p)
+                    if p not in self._config_mtimes or mtime > self._config_mtimes[p]:
+                        reload_needed = True
+                        break
+            except Exception:
+                pass
+
+        if not reload_needed:
+            for trig in ("/tmp/veikk-reload", "/run/veikk-reload"):
+                try:
+                    if os.path.isfile(trig):
+                        mtime = os.path.getmtime(trig)
+                        if trig not in self._config_mtimes or mtime > self._config_mtimes[trig]:
+                            reload_needed = True
+                            break
+                except Exception:
+                    pass
+
+        if reload_needed:
+            logger.info("Detected live configuration change or reload trigger. Reloading settings...")
+            self._handle_reload(None, None)
+            self._record_config_mtimes()
+
     def setup_signals(self):
         signal.signal(signal.SIGINT, self._handle_exit)
         signal.signal(signal.SIGTERM, self._handle_exit)
@@ -70,8 +126,8 @@ class VeikkDriverDaemon:
         logger.info(f"Received signal {signum}, shutting down...")
         self.running = False
 
-    def _handle_reload(self, signum, frame):
-        logger.info("Received SIGHUP, reloading configuration...")
+    def _handle_reload(self, signum=None, frame=None):
+        logger.info("Applying live configuration reload...")
         try:
             new_cfg = load_config(self.config_path)
             self.config = new_cfg
@@ -82,7 +138,11 @@ class VeikkDriverDaemon:
                 self.parser.max_x = new_cfg.max_x
                 self.parser.max_y = new_cfg.max_y
                 self.parser.max_pressure = new_cfg.max_pressure
-            logger.info("Configuration successfully reloaded in running daemon.")
+            logger.info(
+                f"Configuration applied successfully: orientation={new_cfg.orientation}, "
+                f"hover_scale={new_cfg.hover_scale}, b1={new_cfg.button1_action}, "
+                f"b2={new_cfg.button2_action}, scroll_sens={new_cfg.scroll_sensitivity}"
+            )
         except Exception as e:
             logger.error(f"Failed to reload config: {e}")
 
@@ -218,6 +278,9 @@ class VeikkDriverDaemon:
         logger.info(f"Starting veikk-s640d (button_mode='{self.config.button_mode}', orientation={self.config.orientation})")
 
         while self.running:
+            now = time.time()
+            self.check_config_reload(now)
+
             if self._dev is None or self._ep_in is None:
                 connected = self._connect_and_claim()
                 if not connected:
@@ -226,7 +289,7 @@ class VeikkDriverDaemon:
 
             # Read interrupt reports
             try:
-                data = self._ep_in.read(self._ep_in.wMaxPacketSize or 64, timeout=1000)
+                data = self._ep_in.read(self._ep_in.wMaxPacketSize or 64, timeout=250)
                 if not data:
                     continue
 
@@ -234,12 +297,13 @@ class VeikkDriverDaemon:
                 report = self.parser.parse_packet(raw_bytes)
                 if report is not None:
                     if report.in_proximity:
-                        logger.info(f"PACKET: raw={raw_bytes.hex(' ')} -> X={report.x} Y={report.y} P={report.pressure} tip={report.tip_down}")
+                        logger.debug(f"PACKET: raw={raw_bytes.hex(' ')} -> X={report.x} Y={report.y} P={report.pressure} tip={report.tip_down}")
                     if self.uinput_mgr is not None:
                         self.uinput_mgr.dispatch(report)
 
             except usb.core.USBTimeoutError:
-                # Normal when pen is idle/away
+                # Normal when pen is idle/away: check for config updates
+                self.check_config_reload(time.time())
                 continue
             except (usb.core.USBError, BrokenPipeError, ConnectionError) as e:
                 logger.warning(f"USB connection lost: {e}")

@@ -2,6 +2,7 @@
 
 import os
 import sys
+import time
 import math
 import subprocess
 from typing import List, Tuple
@@ -883,8 +884,20 @@ class VeikkConfigWindow(Adw.ApplicationWindow):
             except Exception:
                 pass
 
-        # Send SIGHUP to running driver daemon to reload config
-        subprocess.run(["pkill", "-HUP", "-f", "veikk-s640d"], capture_output=True)
+        # Trigger live reload in the running driver daemon via trigger file (no root permissions needed)
+        for trig in ("/tmp/veikk-reload", "/run/veikk-reload"):
+            try:
+                with open(trig, "w") as f:
+                    f.write(str(time.time()))
+                os.chmod(trig, 0o666)
+            except Exception:
+                pass
+
+        # Also attempt SIGHUP signal if permitted
+        try:
+            subprocess.run(["pkill", "-HUP", "-f", "veikk-s640d"], capture_output=True)
+        except Exception:
+            pass
 
         # Apply input-remapper preset if in remapper mode
         remapper_msg = ""
