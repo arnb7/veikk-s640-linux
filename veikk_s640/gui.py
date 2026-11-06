@@ -156,6 +156,41 @@ window.m3-window {
     color: #fbbf24;
     border: 1px solid rgba(245, 158, 11, 0.3);
 }
+
+.m3-pill.red {
+    background-color: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.m3-entry {
+    background-color: #14171f;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    padding: 8px 12px;
+    color: #f8fafc;
+    font-size: 13px;
+}
+
+.m3-entry:focus {
+    border-color: #3b82f6;
+    outline: none;
+}
+
+.m3-chip {
+    background-color: #242933;
+    color: #cbd5e1;
+    border-radius: 16px;
+    font-weight: 600;
+    font-size: 11px;
+    padding: 5px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.m3-chip:hover {
+    background-color: #2f3644;
+    color: #ffffff;
+}
 """
 
 
@@ -872,12 +907,26 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         left_title.set_xalign(0.0)
         left_card.append(left_title)
 
+        # Mode Selector
+        mode_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        mode_lbl = Gtk.Label(label="Button Routing Mode")
+        mode_lbl.set_xalign(0.0)
+        mode_lbl.add_css_class("m3-card-sub")
+        self.btn_mode_combo = Gtk.DropDown.new_from_strings([
+            "input-remapper (Shortcuts & Macros)",
+            "Native Stylus (Direct BTN_STYLUS)"
+        ])
+        self.btn_mode_combo.set_selected(0 if self.config.button_mode == "remapper" else 1)
+        mode_box.append(mode_lbl)
+        mode_box.append(self.btn_mode_combo)
+        left_card.append(mode_box)
+
         stylus_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         stylus_diagram = StylusDiagramWidget()
         stylus_box.append(stylus_diagram)
 
         # Button Configuration Controls
-        btn_controls = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        btn_controls = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
         btn_controls.set_valign(Gtk.Align.CENTER)
         btn_controls.set_hexpand(True)
 
@@ -892,6 +941,20 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         self.b2_combo.set_selected(action_key_to_index(self.config.button2_action))
         b2_box.append(b2_lbl)
         b2_box.append(self.b2_combo)
+
+        self.b2_custom_entry = Gtk.Entry()
+        self.b2_custom_entry.add_css_class("m3-entry")
+        self.b2_custom_entry.set_placeholder_text("Custom macro (e.g. Control_L+z)")
+        self.b2_custom_entry.set_text(self.config.button2_custom)
+        self.b2_custom_entry.set_visible(self.config.button2_action == "custom")
+        b2_box.append(self.b2_custom_entry)
+
+        def _on_b2_changed(dropdown, _):
+            idx = dropdown.get_selected()
+            key = index_to_action_key(idx)
+            self.b2_custom_entry.set_visible(key == "custom")
+        self.b2_combo.connect("notify::selected", _on_b2_changed)
+
         btn_controls.append(b2_box)
 
         # Button 1 (Lower)
@@ -903,6 +966,20 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         self.b1_combo.set_selected(action_key_to_index(self.config.button1_action))
         b1_box.append(b1_lbl)
         b1_box.append(self.b1_combo)
+
+        self.b1_custom_entry = Gtk.Entry()
+        self.b1_custom_entry.add_css_class("m3-entry")
+        self.b1_custom_entry.set_placeholder_text("Custom macro (e.g. Control_L+s)")
+        self.b1_custom_entry.set_text(self.config.button1_custom)
+        self.b1_custom_entry.set_visible(self.config.button1_action == "custom")
+        b1_box.append(self.b1_custom_entry)
+
+        def _on_b1_changed(dropdown, _):
+            idx = dropdown.get_selected()
+            key = index_to_action_key(idx)
+            self.b1_custom_entry.set_visible(key == "custom")
+        self.b1_combo.connect("notify::selected", _on_b1_changed)
+
         btn_controls.append(b1_box)
 
         stylus_box.append(btn_controls)
@@ -943,7 +1020,7 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         self.curve_graph = PressureCurveWidget(gamma=self.config.pressure_gamma)
         curve_box.append(self.curve_graph)
 
-        sliders_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        sliders_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         sliders_box.set_hexpand(True)
         sliders_box.set_valign(Gtk.Align.CENTER)
 
@@ -969,6 +1046,17 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         self.thresh_scale.set_value(self.config.pressure_threshold)
         self.thresh_scale.set_draw_value(True)
         sliders_box.append(self.thresh_scale)
+
+        # Pressure Smoothing Slider
+        ps_lbl = Gtk.Label(label="Pressure Transition Smoothing")
+        ps_lbl.set_xalign(0.0)
+        ps_lbl.add_css_class("m3-card-sub")
+        sliders_box.append(ps_lbl)
+
+        self.p_smooth_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.0, 1.0, 0.05)
+        self.p_smooth_scale.set_value(self.config.pressure_smoothing)
+        self.p_smooth_scale.set_draw_value(True)
+        sliders_box.append(self.p_smooth_scale)
 
         curve_box.append(sliders_box)
         right_card.append(curve_box)
@@ -1123,6 +1211,27 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         self.area_combo.set_selected(3 if is_custom_area else 0)
         self.area_combo.connect("notify::selected", self._on_working_area_changed)
         area_box.append(self.area_combo)
+
+        # Quick Area Presets Buttons Row
+        area_preset_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        area_preset_row.set_margin_top(2)
+
+        btn_full = Gtk.Button(label="Full (100%)")
+        btn_full.add_css_class("m3-chip")
+        btn_full.connect("clicked", lambda _: self._set_area_preset(0))
+        area_preset_row.append(btn_full)
+
+        btn_169 = Gtk.Button(label="Match 16:9")
+        btn_169.add_css_class("m3-chip")
+        btn_169.connect("clicked", lambda _: self._set_area_preset(1))
+        area_preset_row.append(btn_169)
+
+        btn_notes = Gtk.Button(label="Portrait 1:1")
+        btn_notes.add_css_class("m3-chip")
+        btn_notes.connect("clicked", lambda _: self._set_area_preset(2))
+        area_preset_row.append(btn_notes)
+
+        area_box.append(area_preset_row)
         right_card.append(area_box)
 
         # Sliders for fine-tuning Working Area (Top/Bottom/Left/Right)
@@ -1179,20 +1288,99 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         page.set_margin_end(24)
         page.set_margin_bottom(24)
 
-        # Left Card: Quick Workflow Presets & Button Mode
-        left_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
-        left_card.add_css_class("m3-card")
-        left_card.set_hexpand(True)
+        # Left Column: Distance Scaling Card + Workflow Presets Card
+        left_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        left_col.set_hexpand(True)
+
+        # Card 1: Motion & Distance Scaling
+        motion_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        motion_card.add_css_class("m3-card")
+
+        m_title = Gtk.Label(label="Hover & Motion Distance Scaling")
+        m_title.add_css_class("m3-card-title")
+        m_title.set_xalign(0.0)
+        motion_card.append(m_title)
+
+        m_sub = Gtk.Label(label="Controls cursor travel distance across display (0.50x high precision, 1.00x default 1:1)")
+        m_sub.add_css_class("m3-card-sub")
+        m_sub.set_xalign(0.0)
+        motion_card.append(m_sub)
+
+        # Hover Distance Scale
+        h_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        h_lbl = Gtk.Label(label="Hover Distance Scale Multiplier")
+        h_lbl.set_xalign(0.0)
+        h_lbl.add_css_class("m3-card-sub")
+        h_box.append(h_lbl)
+
+        self.hover_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.10, 2.00, 0.05)
+        self.hover_scale.set_value(self.config.hover_scale)
+        self.hover_scale.set_draw_value(True)
+        h_box.append(self.hover_scale)
+        motion_card.append(h_box)
+
+        # Lock Scales Check
+        self.lock_scales_check = Gtk.CheckButton(label="Lock Hover & Touch Distance (Prevents cursor jumps)")
+        self.lock_scales_check.set_active(self.config.lock_motion_scales)
+        motion_card.append(self.lock_scales_check)
+
+        # Contact Distance Scale
+        c_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        c_lbl = Gtk.Label(label="Touch / Drawing Distance Scale Multiplier")
+        c_lbl.set_xalign(0.0)
+        c_lbl.add_css_class("m3-card-sub")
+        c_box.append(c_lbl)
+
+        self.contact_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.10, 2.00, 0.05)
+        self.contact_scale.set_value(self.config.contact_scale)
+        self.contact_scale.set_draw_value(True)
+        self.contact_scale.set_sensitive(not self.config.lock_motion_scales)
+        c_box.append(self.contact_scale)
+        motion_card.append(c_box)
+
+        def _on_lock_toggled(check):
+            locked = check.get_active()
+            self.contact_scale.set_sensitive(not locked)
+            if locked:
+                self.contact_scale.set_value(self.hover_scale.get_value())
+        self.lock_scales_check.connect("toggled", _on_lock_toggled)
+
+        # Aspect Compensate Check
+        self.aspect_compensate_check = Gtk.CheckButton(label="Equalize Side-to-Side & Up-Down Travel Speeds")
+        self.aspect_compensate_check.set_active(self.config.aspect_compensate)
+        motion_card.append(self.aspect_compensate_check)
+
+        # Distance Presets Chips
+        chips_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        chips_box.set_margin_top(4)
+
+        for label_text, s_val in [
+            ("0.50x Precision", 0.50),
+            ("0.75x Balanced", 0.75),
+            ("1.00x Default", 1.00),
+            ("1.25x Fast", 1.25)
+        ]:
+            c_btn = Gtk.Button(label=label_text)
+            c_btn.add_css_class("m3-chip")
+            c_btn.connect("clicked", lambda _, val=s_val: self._set_motion_scale(val))
+            chips_box.append(c_btn)
+
+        motion_card.append(chips_box)
+        left_col.append(motion_card)
+
+        # Card 2: One-Click Workflow Presets
+        presets_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        presets_card.add_css_class("m3-card")
 
         p_title = Gtk.Label(label="One-Click Workflow Presets")
         p_title.add_css_class("m3-card-title")
         p_title.set_xalign(0.0)
-        left_card.append(p_title)
+        presets_card.append(p_title)
 
         for preset in WORKFLOW_PRESETS:
             row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-            row.set_margin_bottom(4)
-            info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            row.set_margin_bottom(2)
+            info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
             info.set_hexpand(True)
             nl = Gtk.Label(label=preset["name"])
             nl.set_xalign(0.0)
@@ -1208,66 +1396,121 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
             u_btn.add_css_class("m3-btn-tonal")
             u_btn.connect("clicked", lambda _, p=preset: self._apply_workflow_preset(p))
             row.append(u_btn)
-            left_card.append(row)
+            presets_card.append(row)
 
-        page.append(left_card)
+        left_col.append(presets_card)
+        page.append(left_col)
 
-        # Right Card: Pan & Scroll Configuration & Anti-Jitter
-        right_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
-        right_card.add_css_class("m3-card")
-        right_card.set_size_request(360, -1)
+        # Right Column: Pan & Scroll Settings + Anti-Jitter Deadzone + input-remapper Tools
+        right_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        right_col.set_size_request(380, -1)
+
+        # Card 3: Pan & Scroll & Anti-Jitter
+        scroll_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        scroll_card.add_css_class("m3-card")
 
         s_title = Gtk.Label(label="Pan & Smooth Scroll Settings")
         s_title.add_css_class("m3-card-title")
         s_title.set_xalign(0.0)
-        right_card.append(s_title)
+        scroll_card.append(s_title)
 
         sens_lbl = Gtk.Label(label="Scroll Speed & Sensitivity")
         sens_lbl.set_xalign(0.0)
         sens_lbl.add_css_class("m3-card-sub")
-        right_card.append(sens_lbl)
+        scroll_card.append(sens_lbl)
 
         self.scroll_sens_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.2, 3.0, 0.1)
         self.scroll_sens_scale.set_value(self.config.scroll_sensitivity)
         self.scroll_sens_scale.set_draw_value(True)
-        right_card.append(self.scroll_sens_scale)
+        scroll_card.append(self.scroll_sens_scale)
 
         self.scroll_natural_check = Gtk.CheckButton(label="Natural Scrolling (macOS / Touch style)")
         self.scroll_natural_check.set_active(self.config.scroll_natural)
-        right_card.append(self.scroll_natural_check)
+        scroll_card.append(self.scroll_natural_check)
 
         self.scroll_touch_check = Gtk.CheckButton(label="Require Surface Contact (Touch & Slide to scroll)")
         self.scroll_touch_check.set_active(self.config.scroll_require_touch)
-        right_card.append(self.scroll_touch_check)
+        scroll_card.append(self.scroll_touch_check)
 
-        # Anti-Jitter Smoothing
-        j_title = Gtk.Label(label="Adaptive Anti-Jitter Smoothing")
+        # Anti-Jitter Smoothing & Deadzone
+        j_title = Gtk.Label(label="Adaptive Anti-Jitter & Hardware Deadzone")
         j_title.add_css_class("m3-card-title")
         j_title.set_xalign(0.0)
-        j_title.set_margin_top(12)
-        right_card.append(j_title)
+        j_title.set_margin_top(8)
+        scroll_card.append(j_title)
+
+        sm_lbl = Gtk.Label(label="Smoothing Strength")
+        sm_lbl.set_xalign(0.0)
+        sm_lbl.add_css_class("m3-card-sub")
+        scroll_card.append(sm_lbl)
 
         self.smooth_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.0, 1.0, 0.05)
         self.smooth_scale.set_value(self.config.smoothing_factor)
         self.smooth_scale.set_draw_value(True)
-        right_card.append(self.smooth_scale)
+        scroll_card.append(self.smooth_scale)
 
-        page.append(right_card)
+        dz_lbl = Gtk.Label(label="Hardware ADC Deadzone (raw units)")
+        dz_lbl.set_xalign(0.0)
+        dz_lbl.add_css_class("m3-card-sub")
+        scroll_card.append(dz_lbl)
+
+        self.deadzone_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 12, 1)
+        self.deadzone_scale.set_value(self.config.smoothing_deadzone)
+        self.deadzone_scale.set_draw_value(True)
+        scroll_card.append(self.deadzone_scale)
+
+        right_col.append(scroll_card)
+
+        # Card 4: input-remapper Tools
+        rem_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        rem_card.add_css_class("m3-card")
+
+        rem_title = Gtk.Label(label="input-remapper Integration & Service Tools")
+        rem_title.add_css_class("m3-card-title")
+        rem_title.set_xalign(0.0)
+        rem_card.append(rem_title)
+
+        rem_sub = Gtk.Label(label="Inject macros and shortcuts via the system input-remapper daemon")
+        rem_sub.add_css_class("m3-card-sub")
+        rem_sub.set_xalign(0.0)
+        rem_card.append(rem_sub)
+
+        self.autoload_check = Gtk.CheckButton(label="Auto-Activate on Login & Plug-in")
+        self.autoload_check.set_active(self.config.button_autoload)
+        rem_card.append(self.autoload_check)
+
+        rem_btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        rem_btn_box.set_margin_top(4)
+
+        reload_btn = Gtk.Button(label="Reload Injection")
+        reload_btn.add_css_class("m3-btn-tonal")
+        reload_btn.connect("clicked", self._on_reload_remapper_clicked)
+        rem_btn_box.append(reload_btn)
+
+        launch_btn = Gtk.Button(label="Launch Remapper GUI")
+        launch_btn.add_css_class("m3-btn-tonal")
+        launch_btn.connect("clicked", self._on_launch_remapper)
+        rem_btn_box.append(launch_btn)
+
+        rem_card.append(rem_btn_box)
+        right_col.append(rem_card)
+
+        page.append(right_col)
         self.stack.add_named(page, "page_2")
 
     # =========================================================================
     # Page 3: About Us (User Manual Section 7.3)
     # =========================================================================
     def _build_about_page(self):
-        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
-        page.set_margin_start(40)
-        page.set_margin_end(40)
-        page.set_margin_bottom(30)
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        page.set_margin_start(30)
+        page.set_margin_end(30)
+        page.set_margin_bottom(24)
         page.set_valign(Gtk.Align.CENTER)
 
-        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
         card.add_css_class("m3-card")
-        card.set_size_request(600, -1)
+        card.set_size_request(660, -1)
         card.set_halign(Gtk.Align.CENTER)
 
         # VEIKK Logo Header
@@ -1276,9 +1519,30 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         logo_label.set_markup("<span size='28000' weight='bold' letter_spacing='3000'>VEIKK</span>")
         card.append(logo_label)
 
-        ver_label = Gtk.Label(label="Linux Open-Source Userspace Driver v1.0.0")
+        ver_label = Gtk.Label(label="Linux Open-Source Userspace Driver & Control Center v1.0.0")
         ver_label.add_css_class("m3-card-sub")
         card.append(ver_label)
+
+        # Live Status Badges Row
+        badge_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        badge_box.set_halign(Gtk.Align.CENTER)
+
+        self.about_hw_badge = Gtk.Label(label="● VEIKK S640 (USB)")
+        self.about_hw_badge.add_css_class("m3-pill")
+        self.about_hw_badge.add_css_class("green")
+        badge_box.append(self.about_hw_badge)
+
+        self.about_svc_badge = Gtk.Label(label="● Driver Daemon")
+        self.about_svc_badge.add_css_class("m3-pill")
+        self.about_svc_badge.add_css_class("green")
+        badge_box.append(self.about_svc_badge)
+
+        self.about_rem_badge = Gtk.Label(label="● input-remapper")
+        self.about_rem_badge.add_css_class("m3-pill")
+        self.about_rem_badge.add_css_class("green")
+        badge_box.append(self.about_rem_badge)
+
+        card.append(badge_box)
 
         # Diagnostics Output Area
         self.diag_label = Gtk.Label()
@@ -1292,7 +1556,8 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         self.diag_label.add_css_class("m3-card")
         card.append(self.diag_label)
 
-        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        # System Administration Buttons
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         btn_box.set_halign(Gtk.Align.CENTER)
 
         diag_btn = Gtk.Button(label="Run Hardware Diagnostics")
@@ -1300,7 +1565,12 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         diag_btn.connect("clicked", self._run_diagnostics)
         btn_box.append(diag_btn)
 
-        repair_btn = Gtk.Button(label="Repair & Restart Driver Daemon")
+        reload_svc_btn = Gtk.Button(label="Reload Configuration")
+        reload_svc_btn.add_css_class("m3-btn-tonal")
+        reload_svc_btn.connect("clicked", self._reload_service)
+        btn_box.append(reload_svc_btn)
+
+        repair_btn = Gtk.Button(label="Restart Driver Daemon")
         repair_btn.add_css_class("m3-btn-primary")
         repair_btn.connect("clicked", self._restart_service)
         btn_box.append(repair_btn)
@@ -1370,7 +1640,44 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
             self.area_min_y_scale.set_value(0.0)
             self.area_max_y_scale.set_value(1.0)
 
+    def _set_area_preset(self, idx: int):
+        self._updating_area = True
+        try:
+            self.area_combo.set_selected(idx)
+            is_vert = self.config.orientation in (90, 270)
+            if idx == 0:
+                self.area_min_x_scale.set_value(0.0)
+                self.area_max_x_scale.set_value(1.0)
+                self.area_min_y_scale.set_value(0.0)
+                self.area_max_y_scale.set_value(1.0)
+            elif idx == 1:
+                if is_vert:
+                    self.area_min_x_scale.set_value(0.313)
+                    self.area_max_x_scale.set_value(0.687)
+                    self.area_min_y_scale.set_value(0.0)
+                    self.area_max_y_scale.set_value(1.0)
+                else:
+                    self.area_min_x_scale.set_value(0.0)
+                    self.area_max_x_scale.set_value(1.0)
+                    self.area_min_y_scale.set_value(0.078)
+                    self.area_max_y_scale.set_value(0.922)
+            elif idx == 2:
+                self.area_min_x_scale.set_value(0.125)
+                self.area_max_x_scale.set_value(0.875)
+                self.area_min_y_scale.set_value(0.0)
+                self.area_max_y_scale.set_value(1.0)
+
+            self.config.area_min_x = round(self.area_min_x_scale.get_value(), 3)
+            self.config.area_max_x = round(self.area_max_x_scale.get_value(), 3)
+            self.config.area_min_y = round(self.area_min_y_scale.get_value(), 3)
+            self.config.area_max_y = round(self.area_max_y_scale.get_value(), 3)
+            self.mapping_diagram.update_config(self.config)
+        finally:
+            self._updating_area = False
+
     def _on_area_slider_changed(self, _):
+        if getattr(self, "_updating_area", False):
+            return
         self.config.area_min_x = round(self.area_min_x_scale.get_value(), 3)
         self.config.area_max_x = round(self.area_max_x_scale.get_value(), 3)
         self.config.area_min_y = round(self.area_min_y_scale.get_value(), 3)
@@ -1381,7 +1688,7 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
 
     def _restore_mapping_defaults(self, _):
         self.radio_right.set_active(True)
-        self.area_combo.set_selected(0)
+        self._set_area_preset(0)
         self.screen_combo.set_selected(1)
         self.config.area_min_x = 0.0
         self.config.area_max_x = 1.0
@@ -1390,16 +1697,45 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         self.mapping_diagram.update_config(self.config)
 
     def _restore_pen_defaults(self, _):
+        self.btn_mode_combo.set_selected(0)
         self.b1_combo.set_selected(action_key_to_index("mouse:btn_right"))
         self.b2_combo.set_selected(action_key_to_index("pan_scroll"))
+        self.b1_custom_entry.set_text("")
+        self.b2_custom_entry.set_text("")
         self.gamma_scale.set_value(1.0)
         self.thresh_scale.set_value(0)
+        self.p_smooth_scale.set_value(0.15)
+
+    def _set_motion_scale(self, scale_val: float):
+        self.hover_scale.set_value(scale_val)
+        if self.lock_scales_check.get_active():
+            self.contact_scale.set_value(scale_val)
 
     def _apply_workflow_preset(self, preset: dict):
         self.b1_combo.set_selected(action_key_to_index(preset["b1"]))
         self.b2_combo.set_selected(action_key_to_index(preset["b2"]))
+        self.btn_mode_combo.set_selected(0)
         toast = Adw.Toast.new(f"Preset '{preset['name']}' selected. Click 'Apply Changes' to save.")
         self.toast_overlay.add_toast(toast)
+
+    def _on_reload_remapper_clicked(self, _):
+        b1_act = index_to_action_key(self.b1_combo.get_selected())
+        b2_act = index_to_action_key(self.b2_combo.get_selected())
+        c1 = self.b1_custom_entry.get_text()
+        c2 = self.b2_custom_entry.get_text()
+        autoload = self.autoload_check.get_active()
+
+        ok, msg = apply_remapper_preset(b1_act, b2_act, c1, c2, autoload=autoload)
+        self._refresh_hardware_status()
+        toast = Adw.Toast.new(msg if ok else f"Remapper error: {msg}")
+        self.toast_overlay.add_toast(toast)
+
+    def _on_launch_remapper(self, _):
+        try:
+            subprocess.Popen(["input-remapper-gtk"])
+        except Exception as e:
+            toast = Adw.Toast.new(f"Could not open input-remapper: {e}")
+            self.toast_overlay.add_toast(toast)
 
     def _run_diagnostics(self, _):
         connected = False
@@ -1412,26 +1748,48 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
             except Exception:
                 continue
 
+        try:
+            res = subprocess.run(["systemctl", "is-active", "veikk-s640.service"], capture_output=True, text=True)
+            svc_active = (res.stdout.strip() == "active")
+        except Exception:
+            svc_active = False
+
+        rem_active = is_service_active()
+
         status_str = (
             f"<b>Hardware USB:</b> {'Connected (2FEB:0001)' if connected else 'Not Connected'}\n"
+            f"<b>Driver Daemon:</b> {'Active & Running (veikk-s640.service)' if svc_active else 'Inactive / Stopped'}\n"
+            f"<b>input-remapper:</b> {'Active (input-remapper.service)' if rem_active else 'Inactive / Not Running'}\n"
             f"<b>Virtual Pen Device:</b> /dev/uinput Active\n"
             f"<b>Active Orientation:</b> {self.config.orientation}°\n"
             f"<b>Active Crop Area:</b> X=[{self.config.area_min_x:.3f}, {self.config.area_max_x:.3f}], Y=[{self.config.area_min_y:.3f}, {self.config.area_max_y:.3f}]\n"
+            f"<b>Motion Scales:</b> Hover={self.config.hover_scale:.2f}x, Touch={self.config.contact_scale:.2f}x (Locked={self.config.lock_motion_scales})\n"
             f"<b>Configuration:</b> Valid & Synced"
         )
         self.diag_label.set_markup(status_str)
+        self._refresh_hardware_status()
         toast = Adw.Toast.new("Diagnostics check complete.")
         self.toast_overlay.add_toast(toast)
 
     def _restart_service(self, _):
         try:
             subprocess.run(["systemctl", "restart", "veikk-s640.service"], check=False)
+            self._refresh_hardware_status()
             toast = Adw.Toast.new("VEIKK driver service restarted.")
         except Exception as e:
             toast = Adw.Toast.new(f"Failed: {e}")
         self.toast_overlay.add_toast(toast)
 
+    def _reload_service(self, _):
+        try:
+            subprocess.run(["systemctl", "reload", "veikk-s640.service"], check=False)
+            toast = Adw.Toast.new("Driver configuration reloaded.")
+        except Exception as e:
+            toast = Adw.Toast.new(f"Failed: {e}")
+        self.toast_overlay.add_toast(toast)
+
     def _refresh_hardware_status(self):
+        # 1. USB Connection
         connected = False
         for uevent in glob.glob("/sys/bus/usb/devices/*/idVendor"):
             try:
@@ -1445,11 +1803,50 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         if connected:
             self.hw_badge.set_text("● S640 Connected")
             self.hw_badge.remove_css_class("amber")
+            self.hw_badge.remove_css_class("red")
             self.hw_badge.add_css_class("green")
+            if hasattr(self, "about_hw_badge"):
+                self.about_hw_badge.set_text("● VEIKK S640 (USB)")
+                self.about_hw_badge.remove_css_class("amber")
+                self.about_hw_badge.add_css_class("green")
         else:
             self.hw_badge.set_text("○ S640 Disconnected")
             self.hw_badge.remove_css_class("green")
             self.hw_badge.add_css_class("amber")
+            if hasattr(self, "about_hw_badge"):
+                self.about_hw_badge.set_text("○ S640 Disconnected")
+                self.about_hw_badge.remove_css_class("green")
+                self.about_hw_badge.add_css_class("amber")
+
+        # 2. Driver Daemon
+        try:
+            res = subprocess.run(["systemctl", "is-active", "veikk-s640.service"], capture_output=True, text=True)
+            svc_active = (res.stdout.strip() == "active")
+        except Exception:
+            svc_active = False
+
+        if hasattr(self, "about_svc_badge"):
+            if svc_active:
+                self.about_svc_badge.set_text("● Driver Running")
+                self.about_svc_badge.remove_css_class("red")
+                self.about_svc_badge.add_css_class("green")
+            else:
+                self.about_svc_badge.set_text("○ Driver Inactive")
+                self.about_svc_badge.remove_css_class("green")
+                self.about_svc_badge.add_css_class("red")
+
+        # 3. input-remapper Daemon
+        rem_active = is_service_active()
+        if hasattr(self, "about_rem_badge"):
+            if rem_active:
+                self.about_rem_badge.set_text("● input-remapper Active")
+                self.about_rem_badge.remove_css_class("amber")
+                self.about_rem_badge.add_css_class("green")
+            else:
+                self.about_rem_badge.set_text("○ input-remapper Stopped")
+                self.about_rem_badge.remove_css_class("green")
+                self.about_rem_badge.add_css_class("amber")
+
         return True
 
     def _on_apply_clicked(self, _):
@@ -1464,10 +1861,16 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
             self.config.orientation = 270
 
         # 2. Stylus Buttons & Pressure
+        self.config.button_mode = "remapper" if self.btn_mode_combo.get_selected() == 0 else "native"
         self.config.button1_action = index_to_action_key(self.b1_combo.get_selected())
         self.config.button2_action = index_to_action_key(self.b2_combo.get_selected())
+        self.config.button1_custom = self.b1_custom_entry.get_text()
+        self.config.button2_custom = self.b2_custom_entry.get_text()
+        self.config.button_autoload = self.autoload_check.get_active()
+
         self.config.pressure_gamma = round(self.gamma_scale.get_value(), 2)
         self.config.pressure_threshold = int(self.thresh_scale.get_value())
+        self.config.pressure_smoothing = round(self.p_smooth_scale.get_value(), 2)
         self.config.pressure_curve = "gamma" if abs(self.config.pressure_gamma - 1.0) > 0.05 else "linear"
         self.config.smoothing_enable = self.ink_check.get_active()
 
@@ -1477,11 +1880,17 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         self.config.area_min_y = round(self.area_min_y_scale.get_value(), 3)
         self.config.area_max_y = round(self.area_max_y_scale.get_value(), 3)
 
-        # 4. Scroll & Motion
+        # 4. Scroll & Motion Scaling & Smoothing
         self.config.scroll_sensitivity = round(self.scroll_sens_scale.get_value(), 2)
         self.config.scroll_natural = self.scroll_natural_check.get_active()
         self.config.scroll_require_touch = self.scroll_touch_check.get_active()
         self.config.smoothing_factor = round(self.smooth_scale.get_value(), 2)
+        self.config.smoothing_deadzone = int(self.deadzone_scale.get_value())
+
+        self.config.hover_scale = round(self.hover_scale.get_value(), 2)
+        self.config.contact_scale = round(self.contact_scale.get_value(), 2)
+        self.config.lock_motion_scales = self.lock_scales_check.get_active()
+        self.config.aspect_compensate = self.aspect_compensate_check.get_active()
 
         # 5. Persist to disk (both user directory and system /etc if writable)
         save_config(self.config)
@@ -1519,16 +1928,20 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
             pass
 
         # 7. Apply input-remapper bindings if button action changed
-        apply_remapper_preset(
-            self.config.button1_action,
-            self.config.button2_action,
-            autoload=self.config.button_autoload
-        )
+        if self.config.button_mode == "remapper":
+            apply_remapper_preset(
+                self.config.button1_action,
+                self.config.button2_action,
+                custom1=self.config.button1_custom,
+                custom2=self.config.button2_custom,
+                autoload=self.config.button_autoload
+            )
 
         # 8. Re-apply display monitor mapping
         self._on_screen_mapping_changed(self.screen_combo, None)
 
         self.mapping_diagram.update_config(self.config)
+        self._refresh_hardware_status()
         toast = Adw.Toast.new("Settings applied and reloaded immediately.")
         self.toast_overlay.add_toast(toast)
 
