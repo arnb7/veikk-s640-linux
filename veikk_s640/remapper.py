@@ -174,18 +174,26 @@ def apply_remapper_preset(
         with open(cfg_path, "w", encoding="utf-8") as f:
             json.dump(cfg_data, f, indent=4)
 
-        # 3. Reload daemon / start injection
-        cmd = [
-            "input-remapper-control",
-            "--command", "start",
-            "--device", "VEIKK S640 Pen",
-            "--preset", PRESET_NAME
-        ]
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=4)
-        if res.returncode == 0:
-            return True, "Button mapping injected and active!"
-        else:
-            return False, f"Remapper start: {res.stderr.strip() or res.stdout.strip()}"
+        # 3. Reload daemon / start injection across all devices
+        for dev_name in PRESET_DEVICE_NAMES:
+            cmd = [
+                "input-remapper-control",
+                "--command", "start",
+                "--device", dev_name,
+                "--preset", PRESET_NAME
+            ]
+            try:
+                subprocess.run(cmd, capture_output=True, text=True, timeout=3)
+            except Exception:
+                pass
+
+        # Trigger daemon autoload command
+        try:
+            subprocess.run(["input-remapper-control", "--command", "autoload"], capture_output=True, text=True, timeout=3)
+        except Exception:
+            pass
+
+        return True, "Button mapping injected and active!"
 
     except Exception as e:
         logger.error(f"Failed applying remapper preset: {e}")

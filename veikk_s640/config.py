@@ -155,10 +155,17 @@ def load_config(path: str | None = None) -> TabletConfig:
     if path and os.path.isfile(path):
         target_path = path
     else:
+        # Pick the most recently modified configuration file among candidate locations
+        best_mtime = -1.0
         for p in get_config_search_paths():
-            if os.path.isfile(p):
-                target_path = p
-                break
+            try:
+                if os.path.isfile(p):
+                    m = os.path.getmtime(p)
+                    if m > best_mtime:
+                        best_mtime = m
+                        target_path = p
+            except Exception:
+                pass
 
     cfg = TabletConfig()
     if not target_path:

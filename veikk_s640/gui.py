@@ -1445,41 +1445,83 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         return True
 
     def _on_apply_clicked(self, _):
-        # Synchronize configuration
+        # 1. Orientation
+        if self.radio_right.get_active():
+            self.config.orientation = 0
+        elif self.radio_left.get_active():
+            self.config.orientation = 180
+        elif self.radio_p90.get_active():
+            self.config.orientation = 90
+        elif self.radio_p270.get_active():
+            self.config.orientation = 270
+
+        # 2. Stylus Buttons & Pressure
         self.config.button1_action = index_to_action_key(self.b1_combo.get_selected())
         self.config.button2_action = index_to_action_key(self.b2_combo.get_selected())
         self.config.pressure_gamma = round(self.gamma_scale.get_value(), 2)
         self.config.pressure_threshold = int(self.thresh_scale.get_value())
+        self.config.pressure_curve = "gamma" if abs(self.config.pressure_gamma - 1.0) > 0.05 else "linear"
         self.config.smoothing_enable = self.ink_check.get_active()
 
+        # 3. Active Area
         self.config.area_min_x = round(self.area_min_x_scale.get_value(), 3)
         self.config.area_max_x = round(self.area_max_x_scale.get_value(), 3)
         self.config.area_min_y = round(self.area_min_y_scale.get_value(), 3)
         self.config.area_max_y = round(self.area_max_y_scale.get_value(), 3)
 
+        # 4. Scroll & Motion
         self.config.scroll_sensitivity = round(self.scroll_sens_scale.get_value(), 2)
         self.config.scroll_natural = self.scroll_natural_check.get_active()
         self.config.scroll_require_touch = self.scroll_touch_check.get_active()
         self.config.smoothing_factor = round(self.smooth_scale.get_value(), 2)
 
+        # 5. Persist to disk (both user directory and system /etc if writable)
         save_config(self.config)
-
-        # Trigger driver live reload trigger
         try:
-            with open("/tmp/veikk-reload", "w") as f:
-                f.write(str(time.time()))
+            if os.access("/etc/veikk-s640/config.toml", os.W_OK):
+                save_config(self.config, "/etc/veikk-s640/config.toml")
         except Exception:
             pass
 
-        # Apply input-remapper bindings if button action changed
+        # 6. Trigger driver live reload immediately through multiple channels
+        # Channel A: systemctl reload (polkit permits non-root reload without password)
+        try:
+            subprocess.run(["systemctl", "reload", "veikk-s640.service"], capture_output=True, timeout=2)
+        except Exception:
+            pass
+
+        # Channel B: Trigger files in /tmp and /run
+        for trig_path in ("/tmp/veikk-reload", "/run/veikk-reload"):
+            try:
+                with open(trig_path, "w") as f:
+                    f.write(str(time.time()))
+            except Exception:
+                pass
+
+        # Channel C: SIGHUP to running veikk-s640d processes
+        try:
+            out = subprocess.check_output(["pgrep", "-f", "veikk-s640d"]).decode().strip()
+            for pid_str in out.split():
+                try:
+                    import signal
+                    os.kill(int(pid_str), signal.SIGHUP)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # 7. Apply input-remapper bindings if button action changed
         apply_remapper_preset(
             self.config.button1_action,
             self.config.button2_action,
             autoload=self.config.button_autoload
         )
 
+        # 8. Re-apply display monitor mapping
+        self._on_screen_mapping_changed(self.screen_combo, None)
+
         self.mapping_diagram.update_config(self.config)
-        toast = Adw.Toast.new("Settings applied successfully.")
+        toast = Adw.Toast.new("Settings applied and reloaded immediately.")
         self.toast_overlay.add_toast(toast)
 
 

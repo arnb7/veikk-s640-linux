@@ -1,9 +1,9 @@
-"""Core userspace driver daemon loop for VEIKK S640."""
-
+import os
 import sys
 import time
 import signal
 import logging
+import threading
 import usb.core
 import usb.util
 from typing import Optional
@@ -64,6 +64,49 @@ class VeikkDriverDaemon:
         self._last_config_check: float = 0.0
         self._config_mtimes: dict[str, float] = {}
         self._record_config_mtimes()
+
+        # Start dedicated background thread for instant sub-second hot reload
+        self._start_config_watcher()
+
+    def _start_config_watcher(self):
+        """Dedicated background thread that monitors config files and triggers instant live reload."""
+        def _watcher():
+            while self.running:
+                time.sleep(0.15)
+                if not self.running:
+                    break
+                try:
+                    reload_needed = False
+                    from .config import get_config_search_paths
+                    for p in get_config_search_paths():
+                        if os.path.isfile(p):
+                            mtime = os.path.getmtime(p)
+                            if p not in self._config_mtimes or mtime > self._config_mtimes[p]:
+                                reload_needed = True
+                                break
+
+                    if not reload_needed:
+                        for trig in ("/tmp/veikk-reload", "/run/veikk-reload"):
+                            if os.path.isfile(trig):
+                                mtime = os.path.getmtime(trig)
+                                if trig not in self._config_mtimes or mtime > self._config_mtimes[trig]:
+                                    reload_needed = True
+                                    break
+
+                    if reload_needed:
+                        logger.info("Live configuration change detected by watcher thread.")
+                        self._handle_reload(None, None)
+                        self._record_config_mtimes()
+                        # Send SIGHUP to self to wake up any blocking USB read in the main thread
+                        try:
+                            os.kill(os.getpid(), signal.SIGHUP)
+                        except Exception:
+                            pass
+                except Exception as e:
+                    logger.debug(f"Config watcher error: {e}")
+
+        t = threading.Thread(target=_watcher, name="VeikkConfigWatcher", daemon=True)
+        t.start()
 
     def _record_config_mtimes(self):
         """Record modification timestamps of discovered config files and reload triggers."""
@@ -143,8 +186,10 @@ class VeikkDriverDaemon:
                 f"hover_scale={new_cfg.hover_scale}, b1={new_cfg.button1_action}, "
                 f"b2={new_cfg.button2_action}, scroll_sens={new_cfg.scroll_sensitivity}"
             )
+            sys.stdout.flush()
         except Exception as e:
             logger.error(f"Failed to reload config: {e}")
+            sys.stdout.flush()
 
     def _query_device_parameters(self, dev: usb.core.Device):
         """Interrogate string descriptor 0x14 to adapt coordinate width and bounds."""

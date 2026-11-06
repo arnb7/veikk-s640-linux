@@ -425,18 +425,24 @@ class VeikkUinputManager:
         """Update active configuration parameters dynamically."""
         old_is_portrait = self.config.is_portrait
         new_is_portrait = config.is_portrait
+        old_ori = self.config.orientation
+        new_ori = config.orientation
+
         self.config = config
         self.filter.enabled = config.smoothing_enable
         self.filter.smoothing_factor = config.smoothing_factor
         self.filter.deadzone = config.smoothing_deadzone
         self.filter.pressure_smoothing = config.pressure_smoothing
 
-        if old_is_portrait != new_is_portrait and self.pen_dev:
-            # Recreate pen device so kernel and libinput receive correct axis boundaries
+        self.reset_state()
+
+        # If orientation or aspect ratio changed, recreate pen device so axes and bounds match
+        if (old_is_portrait != new_is_portrait or old_ori != new_ori or self.pen_dev is None):
             if self._in_proximity:
                 self._emit_proximity_out()
             try:
-                self.pen_dev.close()
+                if self.pen_dev:
+                    self.pen_dev.close()
             except Exception:
                 pass
             self._create_pen_device()
