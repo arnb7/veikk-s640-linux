@@ -533,6 +533,10 @@ class VeikkConfigWindow(Adw.ApplicationWindow):
         widescreen_btn.connect("clicked", self._set_area_16_9)
         preset_box.append(widescreen_btn)
 
+        notes_btn = Gtk.Button(label="Portrait Notes (Split / 1:1)")
+        notes_btn.connect("clicked", self._set_area_portrait_notes)
+        preset_box.append(notes_btn)
+
         preset_row = Adw.ActionRow(title="Quick Presets")
         preset_row.add_suffix(preset_box)
         area_group.add(preset_row)
@@ -570,14 +574,36 @@ class VeikkConfigWindow(Adw.ApplicationWindow):
         self.area_max_y_scale.set_value(1.0)
 
     def _set_area_16_9(self, _):
-        # Physical S640 aspect ratio is 152.4 / 101.6 = 1.50 (3:2)
-        # 16:9 ratio is 1.777 -> crop vertical area to match 16:9
-        # vertical span needed: 1.50 / 1.7777 = 0.844
-        y_margin = (1.0 - 0.844) / 2.0
-        self.area_min_x_scale.set_value(0.0)
-        self.area_max_x_scale.set_value(1.0)
-        self.area_min_y_scale.set_value(round(y_margin, 3))
-        self.area_max_y_scale.set_value(round(1.0 - y_margin, 3))
+        # Adapt aspect ratio crop based on current orientation
+        ori_idx = self.ori_row.get_selected()
+        is_portrait = (ori_idx in (1, 3))  # 90° or 270°
+
+        if is_portrait:
+            # Physical S640 portrait is 101.6 / 152.4 = 0.667 (2:3)
+            # Screen is 16:9 (1.778). Hardware X is vertical axis on desk.
+            # Active height ratio: (101.6 / 152.4) * (9 / 16) = 0.375
+            margin_x = (1.0 - 0.375) / 2.0
+            self.area_min_x_scale.set_value(round(margin_x, 3))
+            self.area_max_x_scale.set_value(round(1.0 - margin_x, 3))
+            self.area_min_y_scale.set_value(0.0)
+            self.area_max_y_scale.set_value(1.0)
+        else:
+            # Landscape S640 is 152.4 / 101.6 = 1.50 (3:2)
+            # 16:9 ratio is 1.778 -> crop vertical Y area: 1.50 / 1.778 = 0.844
+            y_margin = (1.0 - 0.844) / 2.0
+            self.area_min_x_scale.set_value(0.0)
+            self.area_max_x_scale.set_value(1.0)
+            self.area_min_y_scale.set_value(round(y_margin, 3))
+            self.area_max_y_scale.set_value(round(1.0 - y_margin, 3))
+
+    def _set_area_portrait_notes(self, _):
+        # Optimized for taking notes on half of a 1080p monitor (split screen 960x1080)
+        # Ratio = 960/1080 = 0.889. Tablet portrait height span: (101.6/152.4) * (1080/960) = 0.75
+        margin_x = (1.0 - 0.75) / 2.0
+        self.area_min_x_scale.set_value(round(margin_x, 3))
+        self.area_max_x_scale.set_value(round(1.0 - margin_x, 3))
+        self.area_min_y_scale.set_value(0.0)
+        self.area_max_y_scale.set_value(1.0)
 
     # =========================================================================
     # Page 4: Buttons & Remapping

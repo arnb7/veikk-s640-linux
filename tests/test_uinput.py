@@ -192,6 +192,39 @@ class TestVeikkUinputManager(unittest.TestCase):
         mgr.dispatch(r5_lift)
         self.assertFalse(mgr._scroll_active)
 
+    def test_pan_scroll_portrait_orientation_rotates_deltas(self):
+        # Configure button2 as pan_scroll in 270 degree portrait orientation
+        cfg = TabletConfig(
+            orientation=270,
+            button1_action="mouse:btn_right",
+            button2_action="pan_scroll",
+            scroll_sensitivity=1.0,
+            scroll_natural=False,
+            max_x=30000,
+            max_y=20000,
+            smoothing_enable=False
+        )
+        mgr = VeikkUinputManager(cfg)
+        mgr.pen_dev = MagicMock()
+        mgr.btn_dev = MagicMock()
+        mgr.mouse_dev = MagicMock()
+
+        # Step 1: Touch surface at X=5800, Y=5000 with button 2 held
+        r1 = PenReport(in_proximity=True, tip_down=True, button1=False, button2=True, eraser=False, x=5800, y=5000, pressure=600)
+        mgr.dispatch(r1)
+        self.assertTrue(mgr._scroll_active)
+
+        # Step 2: Slide pen DOWN on desk in 270° orientation
+        # On physical hardware in 270°, moving DOWN decreases raw X (from 5800 to 5000, raw_dx = -800)
+        r2 = PenReport(in_proximity=True, tip_down=True, button1=False, button2=True, eraser=False, x=5000, y=5000, pressure=600)
+        mgr.dispatch(r2)
+
+        # In 270°, dy = -raw_dx = -(-800) = +800 -> 2 scroll ticks down (REL_WHEEL = -2)
+        mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_WHEEL, -2)
+        if hasattr(ecodes, 'REL_WHEEL_HI_RES'):
+            mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_WHEEL_HI_RES, -320)
+        mgr.mouse_dev.syn.assert_called()
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -70,6 +70,31 @@ class TabletConfig:
         """Units per millimeter on Y axis."""
         return int(self.max_y / self.physical_height_mm)
 
+    @property
+    def is_portrait(self) -> bool:
+        """True when tablet is in 90° or 270° portrait/vertical orientation."""
+        return self.orientation in (90, 270)
+
+    @property
+    def output_max_x(self) -> int:
+        """Virtual uinput coordinate maximum for X axis (swapped to 20320 in portrait)."""
+        return self.max_y if self.is_portrait else self.max_x
+
+    @property
+    def output_max_y(self) -> int:
+        """Virtual uinput coordinate maximum for Y axis (swapped to 30480 in portrait)."""
+        return self.max_x if self.is_portrait else self.max_y
+
+    @property
+    def output_res_x(self) -> int:
+        """Virtual uinput resolution for X axis in units/mm."""
+        return self.resolution_y if self.is_portrait else self.resolution_x
+
+    @property
+    def output_res_y(self) -> int:
+        """Virtual uinput resolution for Y axis in units/mm."""
+        return self.resolution_x if self.is_portrait else self.resolution_y
+
     def apply_pressure_curve(self, raw_p: int) -> int:
         """Apply configured threshold, clamping, and gamma response."""
         if raw_p <= self.pressure_threshold:
@@ -84,7 +109,7 @@ class TabletConfig:
         return clamped
 
     def transform_coordinates(self, raw_x: int, raw_y: int) -> tuple[int, int]:
-        """Apply active area cropping and rotation."""
+        """Apply active area cropping and rotation with true isotropic proportions."""
         # 1. Active area normalization & clamping
         x_span = max(self.area_max_x - self.area_min_x, 0.01)
         y_span = max(self.area_max_y - self.area_min_y, 0.01)
@@ -105,8 +130,8 @@ class TabletConfig:
         else:  # 0
             rx, ry = norm_x, norm_y
 
-        out_x = int(rx * self.max_x)
-        out_y = int(ry * self.max_y)
+        out_x = int(rx * self.output_max_x)
+        out_y = int(ry * self.output_max_y)
         return out_x, out_y
 
 

@@ -49,12 +49,11 @@ class VeikkUinputManager:
         self._last_raw_rx: Optional[float] = None
         self._last_raw_ry: Optional[float] = None
 
-    def setup(self):
-        """Create virtual uinput devices for pen, buttons, and mouse scroll."""
-        # 1. Pen Device capabilities
+    def _create_pen_device(self):
+        """Create virtual Pen UInput device with orientation-aware axes bounds."""
         abs_caps = [
-            (ecodes.ABS_X, AbsInfo(value=0, min=0, max=self.config.max_x, fuzz=0, flat=0, resolution=self.config.resolution_x)),
-            (ecodes.ABS_Y, AbsInfo(value=0, min=0, max=self.config.max_y, fuzz=0, flat=0, resolution=self.config.resolution_y)),
+            (ecodes.ABS_X, AbsInfo(value=0, min=0, max=self.config.output_max_x, fuzz=0, flat=0, resolution=self.config.output_res_x)),
+            (ecodes.ABS_Y, AbsInfo(value=0, min=0, max=self.config.output_max_y, fuzz=0, flat=0, resolution=self.config.output_res_y)),
             (ecodes.ABS_PRESSURE, AbsInfo(value=0, min=0, max=self.config.max_pressure, fuzz=0, flat=0, resolution=0)),
         ]
         if self.enable_tilt:
@@ -72,6 +71,24 @@ class VeikkUinputManager:
             ecodes.EV_KEY: pen_keys,
             ecodes.EV_ABS: abs_caps,
         }
+
+        props = []
+        if self.config.input_prop == "direct":
+            props.append(ecodes.INPUT_PROP_DIRECT)
+
+        self.pen_dev = UInput(
+            events=pen_cap,
+            name="VEIKK S640 Pen",
+            vendor=0x2FEB,
+            product=0x0001,
+            version=1,
+            input_props=props
+        )
+
+    def setup(self):
+        """Create virtual uinput devices for pen, buttons, and mouse scroll."""
+        # 1. Pen Device capabilities
+        self._create_pen_device()
 
         # 2. Buttons Device capabilities (dedicated device for input-remapper)
         btn_cap = {
@@ -113,22 +130,6 @@ class VeikkUinputManager:
             version=1
         )
 
-        # Standard graphics tablets have NO input_props. Setting INPUT_PROP_POINTER
-        # causes the kernel to attach mousedev, which converts 5080 LPI absolute
-        # coordinates into runaway relative mouse jumps.
-        props = []
-        if self.config.input_prop == "direct":
-            props.append(ecodes.INPUT_PROP_DIRECT)
-
-        # Create Pen device
-        self.pen_dev = UInput(
-            events=pen_cap,
-            name="VEIKK S640 Pen",
-            vendor=0x2FEB,
-            product=0x0001,
-            version=1,
-            input_props=props
-        )
 
     def compute_coordinates(self, raw_x: int, raw_y: int, is_hover: bool = False) -> tuple[int, int]:
         """Transform raw coordinates through area crop, rotation, and distance scaling."""
@@ -141,16 +142,16 @@ class VeikkUinputManager:
 
         # 1:1 default mapping
         if abs(scale - 1.0) < 0.001:
-            rx = base_x / max(1, self.config.max_x)
-            ry = base_y / max(1, self.config.max_y)
+            rx = base_x / max(1, self.config.output_max_x)
+            ry = base_y / max(1, self.config.output_max_y)
             self._anchor_x = rx
             self._anchor_y = ry
             self._last_raw_rx = rx
             self._last_raw_ry = ry
             return base_x, base_y
 
-        rx = max(0.0, min(1.0, base_x / max(1, self.config.max_x)))
-        ry = max(0.0, min(1.0, base_y / max(1, self.config.max_y)))
+        rx = max(0.0, min(1.0, base_x / max(1, self.config.output_max_x)))
+        ry = max(0.0, min(1.0, base_y / max(1, self.config.output_max_y)))
 
         if self._last_raw_rx is None or self._anchor_x is None:
             self._anchor_x = rx
@@ -173,8 +174,8 @@ class VeikkUinputManager:
         self._anchor_x = out_rx
         self._anchor_y = out_ry
 
-        out_x = int(round(out_rx * self.config.max_x))
-        out_y = int(round(out_ry * self.config.max_y))
+        out_x = int(round(out_rx * self.config.output_max_x))
+        out_y = int(round(out_ry * self.config.output_max_y))
         return out_x, out_y
 
     def dispatch(self, report: PenReport):
@@ -235,10 +236,24 @@ class VeikkUinputManager:
             else:
                 last_x = self._scroll_last_x if self._scroll_last_x is not None else float(smooth_x)
                 last_y = self._scroll_last_y if self._scroll_last_y is not None else float(smooth_y)
-                dx = float(smooth_x) - last_x
-                dy = float(smooth_y) - last_y
+                raw_dx = float(smooth_x) - last_x
+                raw_dy = float(smooth_y) - last_y
                 self._scroll_last_x = float(smooth_x)
                 self._scroll_last_y = float(smooth_y)
+
+                # Rotate raw sensor deltas into physical display deltas based on tablet orientation
+                if self.config.orientation == 90:
+                    dx = -raw_dy
+                    dy = raw_dx
+                elif self.config.orientation == 180:
+                    dx = -raw_dx
+                    dy = -raw_dy
+                elif self.config.orientation == 270:
+                    dx = raw_dy
+                    dy = -raw_dx
+                else:  # 0
+                    dx = raw_dx
+                    dy = raw_dy
 
                 # Continuous High-Resolution Scroll Scale:
                 # 300 raw tablet units (~1.5mm movement) = 1 standard wheel detent (120 hi-res units)
@@ -398,11 +413,23 @@ class VeikkUinputManager:
 
     def update_config(self, config: TabletConfig):
         """Update active configuration parameters dynamically."""
+        old_is_portrait = self.config.is_portrait
+        new_is_portrait = config.is_portrait
         self.config = config
         self.filter.enabled = config.smoothing_enable
         self.filter.smoothing_factor = config.smoothing_factor
         self.filter.deadzone = config.smoothing_deadzone
         self.filter.pressure_smoothing = config.pressure_smoothing
+
+        if old_is_portrait != new_is_portrait and self.pen_dev:
+            # Recreate pen device so kernel and libinput receive correct axis boundaries
+            if self._in_proximity:
+                self._emit_proximity_out()
+            try:
+                self.pen_dev.close()
+            except Exception:
+                pass
+            self._create_pen_device()
 
     def close(self):
         """Cleanly close uinput devices."""
