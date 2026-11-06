@@ -53,6 +53,7 @@ class TabletConfig:
     # Pan / Scroll configuration (holding barrel button and moving pen)
     scroll_sensitivity: float = 1.0  # 0.1 to 3.0 (default 1.0)
     scroll_natural: bool = False      # False = standard PC down-scroll, True = natural touch-style
+    scroll_require_touch: bool = True # True = require touching pen tip to scroll (disables hover scrolling)
 
     # Pressure configuration
     pressure_curve: Literal["linear", "gamma"] = "linear"
@@ -205,6 +206,8 @@ def load_config(path: str | None = None) -> TabletConfig:
             cfg.scroll_sensitivity = max(0.1, min(5.0, float(scroll_sec["sensitivity"])))
         if "natural" in scroll_sec:
             cfg.scroll_natural = bool(scroll_sec["natural"])
+        if "require_touch" in scroll_sec:
+            cfg.scroll_require_touch = bool(scroll_sec["require_touch"])
 
         pressure = data.get("pressure", {})
         p_curve = pressure.get("curve", "linear").lower()
@@ -256,6 +259,7 @@ autoload = {str(cfg.button_autoload).lower()}
 [scroll]
 sensitivity = {cfg.scroll_sensitivity:.2f}
 natural = {str(cfg.scroll_natural).lower()}
+require_touch = {str(cfg.scroll_require_touch).lower()}
 
 [area]
 min_x = {cfg.area_min_x:.3f}

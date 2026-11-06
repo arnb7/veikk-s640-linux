@@ -690,6 +690,13 @@ class VeikkConfigWindow(Adw.ApplicationWindow):
         self.scroll_natural_switch.set_active(self.config.scroll_natural)
         scroll_group.add(self.scroll_natural_switch)
 
+        self.scroll_touch_switch = Adw.SwitchRow(
+            title="Require Surface Touch to Scroll (Touch & Slide)",
+            subtitle="Only scroll when pen tip touches the tablet and slides (prevents accidental scrolling while hovering)"
+        )
+        self.scroll_touch_switch.set_active(self.config.scroll_require_touch)
+        scroll_group.add(self.scroll_touch_switch)
+
         # Group 2: Quick Workflow Presets
         presets_group = Adw.PreferencesGroup(
             title="Quick Workflow Presets",
@@ -874,6 +881,7 @@ class VeikkConfigWindow(Adw.ApplicationWindow):
 
         self.config.scroll_sensitivity = round(self.scroll_sens_scale.get_value(), 2)
         self.config.scroll_natural = self.scroll_natural_switch.get_active()
+        self.config.scroll_require_touch = self.scroll_touch_switch.get_active()
 
         # Save config file
         user_path = save_config(self.config)

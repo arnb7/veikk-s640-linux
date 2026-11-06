@@ -157,29 +157,37 @@ class TestVeikkUinputManager(unittest.TestCase):
         mgr.dispatch(r1)
         self.assertFalse(mgr._scroll_active)
 
-        # Step 2: User presses and holds button 2 (pan_scroll) at (5000, 5000)
-        r2 = PenReport(in_proximity=True, tip_down=False, button1=False, button2=True, eraser=False, x=5000, y=5000, pressure=0)
-        mgr.dispatch(r2)
+        # Step 2: User presses and holds button 2 while HOVERING at (5000, 5000)
+        # Because scroll_require_touch is True, HOVER should NOT trigger scroll!
+        r2_hover = PenReport(in_proximity=True, tip_down=False, button1=False, button2=True, eraser=False, x=5000, y=5000, pressure=0)
+        mgr.dispatch(r2_hover)
+        self.assertFalse(mgr._scroll_active)
+        mgr.mouse_dev.write.assert_not_called()
+
+        # Step 3: User touches pen tip to surface at (5000, 5000) while holding button 2
+        r3_touch = PenReport(in_proximity=True, tip_down=True, button1=False, button2=True, eraser=False, x=5000, y=5000, pressure=600)
+        mgr.dispatch(r3_touch)
         self.assertTrue(mgr._scroll_active)
         self.assertEqual(mgr._scroll_frozen_x, 5000)
         self.assertEqual(mgr._scroll_frozen_y, 5000)
 
-        # Step 3: User moves pen down to Y=5800 while holding button 2
+        # Step 4: User slides pen down to Y=5800 on surface while holding button 2
         # Delta Y = +800 units -> step is 300 units -> 2 scroll ticks down (REL_WHEEL = -2)
-        r3 = PenReport(in_proximity=True, tip_down=False, button1=False, button2=True, eraser=False, x=5000, y=5800, pressure=0)
-        mgr.dispatch(r3)
+        r4_slide = PenReport(in_proximity=True, tip_down=True, button1=False, button2=True, eraser=False, x=5000, y=5800, pressure=600)
+        mgr.dispatch(r4_slide)
 
-        # Cursor MUST be locked at 5000, 5000 (not 5800)
+        # Cursor MUST be locked at 5000, 5000 (not 5800) and touch click suppressed
         mgr.pen_dev.write.assert_any_call(ecodes.EV_ABS, ecodes.ABS_X, 5000)
         mgr.pen_dev.write.assert_any_call(ecodes.EV_ABS, ecodes.ABS_Y, 5000)
+        mgr.pen_dev.write.assert_any_call(ecodes.EV_KEY, ecodes.BTN_TOUCH, 0)
 
         # mouse_dev MUST have received REL_WHEEL down (-2)
         mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_WHEEL, -2)
         mgr.mouse_dev.syn.assert_called()
 
-        # Step 4: User releases button 2 at (5000, 5800)
-        r4 = PenReport(in_proximity=True, tip_down=False, button1=False, button2=False, eraser=False, x=5000, y=5800, pressure=0)
-        mgr.dispatch(r4)
+        # Step 5: User lifts pen up to hover (tip_down=False, pressure=0)
+        r5_lift = PenReport(in_proximity=True, tip_down=False, button1=False, button2=True, eraser=False, x=5000, y=5800, pressure=0)
+        mgr.dispatch(r5_lift)
         self.assertFalse(mgr._scroll_active)
 
 

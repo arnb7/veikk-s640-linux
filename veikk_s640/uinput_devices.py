@@ -210,7 +210,12 @@ class VeikkUinputManager:
         # Check if Pan / Scroll is triggered by holding an assigned button
         b1_is_scroll = (self.config.button1_action == "pan_scroll")
         b2_is_scroll = (self.config.button2_action == "pan_scroll")
-        scroll_active = (b1_is_scroll and report.button1) or (b2_is_scroll and report.button2)
+        scroll_btn_pressed = (b1_is_scroll and report.button1) or (b2_is_scroll and report.button2)
+
+        if self.config.scroll_require_touch:
+            scroll_active = scroll_btn_pressed and bool(is_touch)
+        else:
+            scroll_active = scroll_btn_pressed
 
         if scroll_active:
             if not self._scroll_active:
