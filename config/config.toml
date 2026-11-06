@@ -47,12 +47,19 @@ lock_scales = true
 
 [buttons]
 # Stylus barrel button remapping (in-app input-remapper presets)
-# button1_action: "mouse:btn_right", "mouse:btn_middle", "keyboard:Control_L + z", "keyboard:e", etc.
+# button1_action: "mouse:btn_right", "pan_scroll", "mouse:btn_middle", "keyboard:Control_L + z", etc.
 button1_action = "mouse:btn_right"
-button2_action = "keyboard:Control_L + z"
+button2_action = "pan_scroll"
 button1_custom = ""
 button2_custom = ""
 autoload = true
+
+[scroll]
+# Pan / Scroll settings when holding a barrel button:
+#   sensitivity: 0.20 to 3.00 (default 1.0 = ~1.5mm movement per scroll tick).
+#   natural: false = standard PC wheel-down when gliding down; true = touchscreen/macOS inverted.
+sensitivity = 1.00
+natural = false
 
 [area]
 # Active area crop ratios (0.0 to 1.0)

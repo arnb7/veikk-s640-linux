@@ -45,10 +45,14 @@ class TabletConfig:
 
     # Stylus button mapping (integrated input-remapper presets)
     button1_action: str = "mouse:btn_right"
-    button2_action: str = "keyboard:Control_L + z"
+    button2_action: str = "pan_scroll"
     button1_custom: str = ""
     button2_custom: str = ""
     button_autoload: bool = True
+
+    # Pan / Scroll configuration (holding barrel button and moving pen)
+    scroll_sensitivity: float = 1.0  # 0.1 to 3.0 (default 1.0)
+    scroll_natural: bool = False      # False = standard PC down-scroll, True = natural touch-style
 
     # Pressure configuration
     pressure_curve: Literal["linear", "gamma"] = "linear"
@@ -196,6 +200,12 @@ def load_config(path: str | None = None) -> TabletConfig:
         if "autoload" in btn_sec:
             cfg.button_autoload = bool(btn_sec["autoload"])
 
+        scroll_sec = data.get("scroll", {})
+        if "sensitivity" in scroll_sec:
+            cfg.scroll_sensitivity = max(0.1, min(5.0, float(scroll_sec["sensitivity"])))
+        if "natural" in scroll_sec:
+            cfg.scroll_natural = bool(scroll_sec["natural"])
+
         pressure = data.get("pressure", {})
         p_curve = pressure.get("curve", "linear").lower()
         if p_curve in ("linear", "gamma"):
@@ -242,6 +252,10 @@ button2_action = "{cfg.button2_action}"
 button1_custom = "{cfg.button1_custom}"
 button2_custom = "{cfg.button2_custom}"
 autoload = {str(cfg.button_autoload).lower()}
+
+[scroll]
+sensitivity = {cfg.scroll_sensitivity:.2f}
+natural = {str(cfg.scroll_natural).lower()}
 
 [area]
 min_x = {cfg.area_min_x:.3f}

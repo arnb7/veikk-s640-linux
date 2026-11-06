@@ -24,12 +24,22 @@ class VeikkUinputManager:
 
         self.pen_dev: Optional[UInput] = None
         self.btn_dev: Optional[UInput] = None
+        self.mouse_dev: Optional[UInput] = None
 
         self._in_proximity = False
         self._last_tip_down = False
         self._last_btn1 = False
         self._last_btn2 = False
         self._last_eraser = False
+
+        # Pan / Scroll holding state
+        self._scroll_active = False
+        self._scroll_last_x: Optional[float] = None
+        self._scroll_last_y: Optional[float] = None
+        self._scroll_accum_x = 0.0
+        self._scroll_accum_y = 0.0
+        self._scroll_frozen_x: Optional[int] = None
+        self._scroll_frozen_y: Optional[int] = None
 
         # Motion distance scaling anchor state
         self._anchor_x: Optional[float] = None
@@ -38,7 +48,7 @@ class VeikkUinputManager:
         self._last_raw_ry: Optional[float] = None
 
     def setup(self):
-        """Create both virtual uinput devices."""
+        """Create virtual uinput devices for pen, buttons, and mouse scroll."""
         # 1. Pen Device capabilities
         abs_caps = [
             (ecodes.ABS_X, AbsInfo(value=0, min=0, max=self.config.max_x, fuzz=0, flat=0, resolution=self.config.resolution_x)),
@@ -74,6 +84,28 @@ class VeikkUinputManager:
         self.btn_dev = UInput(
             events=btn_cap,
             name="VEIKK S640 Buttons",
+            vendor=0x2FEB,
+            product=0x0001,
+            version=1
+        )
+
+        # 3. Mouse Device capabilities (for smooth wheel scrolling & mouse pan clicks)
+        mouse_cap = {
+            ecodes.EV_REL: [
+                ecodes.REL_WHEEL,
+                ecodes.REL_HWHEEL,
+                getattr(ecodes, 'REL_WHEEL_HI_RES', 11),
+                getattr(ecodes, 'REL_HWHEEL_HI_RES', 12)
+            ],
+            ecodes.EV_KEY: [
+                ecodes.BTN_LEFT,
+                ecodes.BTN_RIGHT,
+                ecodes.BTN_MIDDLE
+            ]
+        }
+        self.mouse_dev = UInput(
+            events=mouse_cap,
+            name="VEIKK S640 Mouse",
             vendor=0x2FEB,
             product=0x0001,
             version=1
@@ -175,6 +207,85 @@ class VeikkUinputManager:
 
         x, y = self.compute_coordinates(smooth_x, smooth_y, is_hover=is_hover)
 
+        # Check if Pan / Scroll is triggered by holding an assigned button
+        b1_is_scroll = (self.config.button1_action == "pan_scroll")
+        b2_is_scroll = (self.config.button2_action == "pan_scroll")
+        scroll_active = (b1_is_scroll and report.button1) or (b2_is_scroll and report.button2)
+
+        if scroll_active:
+            if not self._scroll_active:
+                # Entering scroll mode on this frame
+                self._scroll_active = True
+                self._scroll_last_x = float(smooth_x)
+                self._scroll_last_y = float(smooth_y)
+                self._scroll_accum_x = 0.0
+                self._scroll_accum_y = 0.0
+                self._scroll_frozen_x = x
+                self._scroll_frozen_y = y
+            else:
+                last_x = self._scroll_last_x if self._scroll_last_x is not None else float(smooth_x)
+                last_y = self._scroll_last_y if self._scroll_last_y is not None else float(smooth_y)
+                dx = float(smooth_x) - last_x
+                dy = float(smooth_y) - last_y
+                self._scroll_last_x = float(smooth_x)
+                self._scroll_last_y = float(smooth_y)
+
+                self._scroll_accum_x += dx
+                self._scroll_accum_y += dy
+
+                # Sensitivity step in tablet units (default: ~300 units = ~1.5mm movement)
+                step = max(30, int(300.0 / max(0.1, self.config.scroll_sensitivity)))
+
+                # Vertical wheel scroll
+                if abs(self._scroll_accum_y) >= step:
+                    ticks = int(self._scroll_accum_y / step)
+                    self._scroll_accum_y -= ticks * step
+                    # In Linux evdev REL_WHEEL: +1 = up, -1 = down
+                    # Standard: moving pen down (dy > 0) scrolls page down (wheel -1)
+                    wheel_val = ticks if self.config.scroll_natural else -ticks
+                    if self.mouse_dev:
+                        self.mouse_dev.write(ecodes.EV_REL, ecodes.REL_WHEEL, wheel_val)
+                        if hasattr(ecodes, 'REL_WHEEL_HI_RES'):
+                            self.mouse_dev.write(ecodes.EV_REL, ecodes.REL_WHEEL_HI_RES, wheel_val * 120)
+                        self.mouse_dev.syn()
+
+                # Horizontal wheel scroll
+                if abs(self._scroll_accum_x) >= step:
+                    h_ticks = int(self._scroll_accum_x / step)
+                    self._scroll_accum_x -= h_ticks * step
+                    # In Linux evdev REL_HWHEEL: +1 = right, -1 = left
+                    # Standard: moving pen right (dx > 0) scrolls right (+1)
+                    h_val = -h_ticks if self.config.scroll_natural else h_ticks
+                    if self.mouse_dev:
+                        self.mouse_dev.write(ecodes.EV_REL, ecodes.REL_HWHEEL, h_val)
+                        if hasattr(ecodes, 'REL_HWHEEL_HI_RES'):
+                            self.mouse_dev.write(ecodes.EV_REL, ecodes.REL_HWHEEL_HI_RES, h_val * 120)
+                        self.mouse_dev.syn()
+
+            # Keep pen cursor locked at initial scroll anchor and suppress accidental touches/draws
+            if self._scroll_frozen_x is not None and self._scroll_frozen_y is not None:
+                self.pen_dev.write(ecodes.EV_ABS, ecodes.ABS_X, self._scroll_frozen_x)
+                self.pen_dev.write(ecodes.EV_ABS, ecodes.ABS_Y, self._scroll_frozen_y)
+            self.pen_dev.write(ecodes.EV_ABS, ecodes.ABS_PRESSURE, 0)
+            self.pen_dev.write(ecodes.EV_KEY, ecodes.BTN_TOUCH, 0)
+            self.pen_dev.syn()
+            return
+
+        if self._scroll_active:
+            # Scroll button just released!
+            self._scroll_active = False
+            self._scroll_last_x = None
+            self._scroll_last_y = None
+            self._scroll_accum_x = 0.0
+            self._scroll_accum_y = 0.0
+            self._scroll_frozen_x = None
+            self._scroll_frozen_y = None
+            # Re-anchor distance scaling to avoid jump
+            self._anchor_x = None
+            self._anchor_y = None
+            self._last_raw_rx = None
+            self._last_raw_ry = None
+
         self.pen_dev.write(ecodes.EV_ABS, ecodes.ABS_X, x)
         self.pen_dev.write(ecodes.EV_ABS, ecodes.ABS_Y, y)
         self.pen_dev.write(ecodes.EV_ABS, ecodes.ABS_PRESSURE, pressure if is_touch else 0)
@@ -185,25 +296,28 @@ class VeikkUinputManager:
             self.pen_dev.write(ecodes.EV_ABS, ecodes.ABS_TILT_X, report.tilt_x)
             self.pen_dev.write(ecodes.EV_ABS, ecodes.ABS_TILT_Y, report.tilt_y)
 
-        # Button dispatching based on button_mode
+        # Button dispatching based on button_mode (skipping buttons consumed by pan_scroll)
+        eff_b1 = False if b1_is_scroll else report.button1
+        eff_b2 = False if b2_is_scroll else report.button2
+
         if self.config.button_mode == "native":
             # Send to pen uinput as standard tablet barrel buttons
-            if report.button1 != self._last_btn1:
-                self.pen_dev.write(ecodes.EV_KEY, ecodes.BTN_STYLUS, 1 if report.button1 else 0)
-                self._last_btn1 = report.button1
-            if report.button2 != self._last_btn2:
-                self.pen_dev.write(ecodes.EV_KEY, ecodes.BTN_STYLUS2, 1 if report.button2 else 0)
-                self._last_btn2 = report.button2
+            if eff_b1 != self._last_btn1:
+                self.pen_dev.write(ecodes.EV_KEY, ecodes.BTN_STYLUS, 1 if eff_b1 else 0)
+                self._last_btn1 = eff_b1
+            if eff_b2 != self._last_btn2:
+                self.pen_dev.write(ecodes.EV_KEY, ecodes.BTN_STYLUS2, 1 if eff_b2 else 0)
+                self._last_btn2 = eff_b2
         elif self.config.button_mode == "remapper":
             # Send ONLY to Buttons uinput device, NEVER to Pen device
             btn_changed = False
-            if report.button1 != self._last_btn1:
-                self.btn_dev.write(ecodes.EV_KEY, ecodes.BTN_0, 1 if report.button1 else 0)
-                self._last_btn1 = report.button1
+            if eff_b1 != self._last_btn1:
+                self.btn_dev.write(ecodes.EV_KEY, ecodes.BTN_0, 1 if eff_b1 else 0)
+                self._last_btn1 = eff_b1
                 btn_changed = True
-            if report.button2 != self._last_btn2:
-                self.btn_dev.write(ecodes.EV_KEY, ecodes.BTN_1, 1 if report.button2 else 0)
-                self._last_btn2 = report.button2
+            if eff_b2 != self._last_btn2:
+                self.btn_dev.write(ecodes.EV_KEY, ecodes.BTN_1, 1 if eff_b2 else 0)
+                self._last_btn2 = eff_b2
                 btn_changed = True
             if report.eraser != self._last_eraser:
                 self.btn_dev.write(ecodes.EV_KEY, ecodes.BTN_2, 1 if report.eraser else 0)
@@ -218,6 +332,14 @@ class VeikkUinputManager:
         """Reset all active contacts when pen leaves the tablet surface."""
         if not self.pen_dev:
             return
+
+        self._scroll_active = False
+        self._scroll_last_x = None
+        self._scroll_last_y = None
+        self._scroll_accum_x = 0.0
+        self._scroll_accum_y = 0.0
+        self._scroll_frozen_x = None
+        self._scroll_frozen_y = None
 
         self.pen_dev.write(ecodes.EV_KEY, ecodes.BTN_TOUCH, 0)
         self.pen_dev.write(ecodes.EV_ABS, ecodes.ABS_PRESSURE, 0)
@@ -264,3 +386,6 @@ class VeikkUinputManager:
         if self.btn_dev:
             self.btn_dev.close()
             self.btn_dev = None
+        if self.mouse_dev:
+            self.mouse_dev.close()
+            self.mouse_dev = None

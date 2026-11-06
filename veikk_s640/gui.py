@@ -663,6 +663,32 @@ class VeikkConfigWindow(Adw.ApplicationWindow):
         self.autoload_switch.set_active(self.config.button_autoload)
         btn_group.add(self.autoload_switch)
 
+        # Group 1b: Pan & Scroll Settings
+        scroll_group = Adw.PreferencesGroup(
+            title="Pan & Scroll Settings (Hold Pen Button)",
+            description="When Button 1 or Button 2 is set to 'Pan / Scroll', hold that button down and glide your pen up or down over the tablet to smoothly scroll web pages, documents, and code editors."
+        )
+        page.add(scroll_group)
+
+        self.scroll_sens_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.2, 3.0, 0.1)
+        self.scroll_sens_scale.set_value(self.config.scroll_sensitivity)
+        self.scroll_sens_scale.set_hexpand(True)
+        self.scroll_sens_scale.set_draw_value(True)
+
+        scroll_sens_row = Adw.ActionRow(
+            title="Scroll Speed & Sensitivity",
+            subtitle="Adjust how rapidly pages scroll when gliding the pen (Default: 1.0x)"
+        )
+        scroll_sens_row.add_suffix(self.scroll_sens_scale)
+        scroll_group.add(scroll_sens_row)
+
+        self.scroll_natural_switch = Adw.SwitchRow(
+            title="Natural Scrolling Direction",
+            subtitle="Inverts scroll direction (touchscreen / macOS style: moving down pushes content down)"
+        )
+        self.scroll_natural_switch.set_active(self.config.scroll_natural)
+        scroll_group.add(self.scroll_natural_switch)
+
         # Group 2: Quick Workflow Presets
         presets_group = Adw.PreferencesGroup(
             title="Quick Workflow Presets",
@@ -844,6 +870,9 @@ class VeikkConfigWindow(Adw.ApplicationWindow):
         self.config.button1_custom = self.b1_custom_row.get_text()
         self.config.button2_custom = self.b2_custom_row.get_text()
         self.config.button_autoload = self.autoload_switch.get_active()
+
+        self.config.scroll_sensitivity = round(self.scroll_sens_scale.get_value(), 2)
+        self.config.scroll_natural = self.scroll_natural_switch.get_active()
 
         # Save config file
         user_path = save_config(self.config)

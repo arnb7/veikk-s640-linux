@@ -14,6 +14,7 @@ PRESET_NAME = "default"
 # Common friendly button actions: (Display Name, action_key, description)
 BUTTON_ACTIONS = [
     ("Right Click (Default)", "mouse:btn_right", "Standard right-click context menu"),
+    ("Pan / Scroll (Hold & Move Pen)", "pan_scroll", "Hold pen button & glide up/down to scroll pages/docs"),
     ("Middle Click / Pan", "mouse:btn_middle", "Middle mouse click, canvas pan"),
     ("Left Click", "mouse:btn_left", "Primary mouse button click"),
     ("Undo (Ctrl+Z)", "keyboard:Control_L + z", "Undo previous brush stroke / action"),
@@ -32,6 +33,12 @@ BUTTON_ACTIONS = [
 ]
 
 WORKFLOW_PRESETS = [
+    {
+        "name": "Web & Document Browsing",
+        "b1": "mouse:btn_right",
+        "b2": "pan_scroll",
+        "desc": "Button 1: Right-Click | Button 2: Pan & Scroll (Hold & Glide Pen)"
+    },
     {
         "name": "Digital Painting (Krita / GIMP)",
         "b1": "mouse:btn_right",
@@ -64,7 +71,7 @@ def action_key_to_index(action_key: str) -> int:
     for idx, (_, key, _) in enumerate(BUTTON_ACTIONS):
         if key == action_key:
             return idx
-    return 14  # Custom
+    return len(BUTTON_ACTIONS) - 2  # Custom
 
 
 def index_to_action_key(idx: int) -> str:
@@ -84,7 +91,7 @@ def build_mapping_payload(
     mappings = []
 
     def _make_mapping(action: str, custom_val: str, code: int) -> Optional[dict]:
-        if action == "disabled":
+        if action in ("disabled", "pan_scroll"):
             return None
         if action == "custom":
             symbol = custom_val.strip()

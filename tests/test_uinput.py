@@ -11,8 +11,22 @@ from veikk_s640.uinput_devices import VeikkUinputManager
 class TestVeikkUinputManager(unittest.TestCase):
 
     def setUp(self):
-        self.config_native = TabletConfig(button_mode="native", max_x=1000, max_y=1000, max_pressure=1000)
-        self.config_remapper = TabletConfig(button_mode="remapper", max_x=1000, max_y=1000, max_pressure=1000)
+        self.config_native = TabletConfig(
+            button_mode="native",
+            button1_action="mouse:btn_right",
+            button2_action="keyboard:Control_L + z",
+            max_x=1000,
+            max_y=1000,
+            max_pressure=1000
+        )
+        self.config_remapper = TabletConfig(
+            button_mode="remapper",
+            button1_action="mouse:btn_right",
+            button2_action="keyboard:Control_L + z",
+            max_x=1000,
+            max_y=1000,
+            max_pressure=1000
+        )
 
     def test_remapper_mode_dispatches_buttons_only_to_buttons_dev(self):
         mgr = VeikkUinputManager(self.config_remapper)
@@ -121,6 +135,52 @@ class TestVeikkUinputManager(unittest.TestCase):
         x1, y1 = mgr_half.compute_coordinates(600, 600, is_hover=True)
         self.assertEqual(x1, 500)
         self.assertEqual(y1, 500)
+
+    def test_pan_scroll_holding_emits_wheel_and_locks_cursor(self):
+        # Configure button2 as pan_scroll
+        cfg = TabletConfig(
+            button1_action="mouse:btn_right",
+            button2_action="pan_scroll",
+            scroll_sensitivity=1.0,
+            scroll_natural=False,
+            max_x=30000,
+            max_y=20000,
+            smoothing_enable=False
+        )
+        mgr = VeikkUinputManager(cfg)
+        mgr.pen_dev = MagicMock()
+        mgr.btn_dev = MagicMock()
+        mgr.mouse_dev = MagicMock()
+
+        # Step 1: Pen enters proximity at (5000, 5000), no button
+        r1 = PenReport(in_proximity=True, tip_down=False, button1=False, button2=False, eraser=False, x=5000, y=5000, pressure=0)
+        mgr.dispatch(r1)
+        self.assertFalse(mgr._scroll_active)
+
+        # Step 2: User presses and holds button 2 (pan_scroll) at (5000, 5000)
+        r2 = PenReport(in_proximity=True, tip_down=False, button1=False, button2=True, eraser=False, x=5000, y=5000, pressure=0)
+        mgr.dispatch(r2)
+        self.assertTrue(mgr._scroll_active)
+        self.assertEqual(mgr._scroll_frozen_x, 5000)
+        self.assertEqual(mgr._scroll_frozen_y, 5000)
+
+        # Step 3: User moves pen down to Y=5800 while holding button 2
+        # Delta Y = +800 units -> step is 300 units -> 2 scroll ticks down (REL_WHEEL = -2)
+        r3 = PenReport(in_proximity=True, tip_down=False, button1=False, button2=True, eraser=False, x=5000, y=5800, pressure=0)
+        mgr.dispatch(r3)
+
+        # Cursor MUST be locked at 5000, 5000 (not 5800)
+        mgr.pen_dev.write.assert_any_call(ecodes.EV_ABS, ecodes.ABS_X, 5000)
+        mgr.pen_dev.write.assert_any_call(ecodes.EV_ABS, ecodes.ABS_Y, 5000)
+
+        # mouse_dev MUST have received REL_WHEEL down (-2)
+        mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_WHEEL, -2)
+        mgr.mouse_dev.syn.assert_called()
+
+        # Step 4: User releases button 2 at (5000, 5800)
+        r4 = PenReport(in_proximity=True, tip_down=False, button1=False, button2=False, eraser=False, x=5000, y=5800, pressure=0)
+        mgr.dispatch(r4)
+        self.assertFalse(mgr._scroll_active)
 
 
 if __name__ == '__main__':
