@@ -36,8 +36,10 @@ class VeikkUinputManager:
         self._scroll_active = False
         self._scroll_last_x: Optional[float] = None
         self._scroll_last_y: Optional[float] = None
-        self._scroll_accum_x = 0.0
-        self._scroll_accum_y = 0.0
+        self._scroll_hi_res_accum_x = 0.0
+        self._scroll_hi_res_accum_y = 0.0
+        self._scroll_discrete_accum_x = 0
+        self._scroll_discrete_accum_y = 0
         self._scroll_frozen_x: Optional[int] = None
         self._scroll_frozen_y: Optional[int] = None
 
@@ -196,14 +198,15 @@ class VeikkUinputManager:
             self._last_raw_rx = None
             self._last_raw_ry = None
 
-        # Apply anti-jitter & adaptive motion smoothing
-        smooth_x, smooth_y = self.filter.filter_position(report.x, report.y)
-        smooth_p = self.filter.filter_pressure(report.pressure)
-
         # Process Coordinates & Pressure
+        # Evaluate contact status so smoothing filter knows whether the pen is touching (writing/drawing)
+        smooth_p = self.filter.filter_pressure(report.pressure)
         pressure = self.config.apply_pressure_curve(smooth_p)
-        is_touch = 1 if (report.tip_down or pressure > 0) else 0
+        is_touch = 1 if (report.tip_down or pressure > 0 or report.pressure > 0) else 0
         is_hover = (is_touch == 0)
+
+        # Apply anti-jitter & adaptive motion smoothing with touch-aware inking precision
+        smooth_x, smooth_y = self.filter.filter_position(report.x, report.y, is_touch=bool(is_touch))
 
         x, y = self.compute_coordinates(smooth_x, smooth_y, is_hover=is_hover)
 
@@ -223,8 +226,10 @@ class VeikkUinputManager:
                 self._scroll_active = True
                 self._scroll_last_x = float(smooth_x)
                 self._scroll_last_y = float(smooth_y)
-                self._scroll_accum_x = 0.0
-                self._scroll_accum_y = 0.0
+                self._scroll_hi_res_accum_x = 0.0
+                self._scroll_hi_res_accum_y = 0.0
+                self._scroll_discrete_accum_x = 0
+                self._scroll_discrete_accum_y = 0
                 self._scroll_frozen_x = x
                 self._scroll_frozen_y = y
             else:
@@ -235,36 +240,50 @@ class VeikkUinputManager:
                 self._scroll_last_x = float(smooth_x)
                 self._scroll_last_y = float(smooth_y)
 
-                self._scroll_accum_x += dx
-                self._scroll_accum_y += dy
+                # Continuous High-Resolution Scroll Scale:
+                # 300 raw tablet units (~1.5mm movement) = 1 standard wheel detent (120 hi-res units)
+                scale = (120.0 / 300.0) * max(0.1, self.config.scroll_sensitivity)
 
-                # Sensitivity step in tablet units (default: ~300 units = ~1.5mm movement)
-                step = max(30, int(300.0 / max(0.1, self.config.scroll_sensitivity)))
-
-                # Vertical wheel scroll
-                if abs(self._scroll_accum_y) >= step:
-                    ticks = int(self._scroll_accum_y / step)
-                    self._scroll_accum_y -= ticks * step
+                # 1. Continuous Vertical Smooth Scrolling
+                self._scroll_hi_res_accum_y += dy * scale
+                if abs(self._scroll_hi_res_accum_y) >= 1.0:
+                    hi_val_y = int(self._scroll_hi_res_accum_y)
+                    self._scroll_hi_res_accum_y -= float(hi_val_y)
                     # In Linux evdev REL_WHEEL: +1 = up, -1 = down
-                    # Standard: moving pen down (dy > 0) scrolls page down (wheel -1)
-                    wheel_val = ticks if self.config.scroll_natural else -ticks
+                    # Standard: moving pen down (dy > 0) scrolls page down (negative)
+                    hi_wheel_y = hi_val_y if self.config.scroll_natural else -hi_val_y
+
                     if self.mouse_dev:
-                        self.mouse_dev.write(ecodes.EV_REL, ecodes.REL_WHEEL, wheel_val)
+                        # Emit high-resolution sub-wheel events for liquid 60/120fps scrolling
                         if hasattr(ecodes, 'REL_WHEEL_HI_RES'):
-                            self.mouse_dev.write(ecodes.EV_REL, ecodes.REL_WHEEL_HI_RES, wheel_val * 120)
+                            self.mouse_dev.write(ecodes.EV_REL, ecodes.REL_WHEEL_HI_RES, hi_wheel_y)
+
+                        # Accumulate discrete wheel ticks for legacy applications
+                        self._scroll_discrete_accum_y += hi_wheel_y
+                        if abs(self._scroll_discrete_accum_y) >= 120:
+                            disc_ticks = int(self._scroll_discrete_accum_y / 120)
+                            self._scroll_discrete_accum_y -= disc_ticks * 120
+                            self.mouse_dev.write(ecodes.EV_REL, ecodes.REL_WHEEL, disc_ticks)
                         self.mouse_dev.syn()
 
-                # Horizontal wheel scroll
-                if abs(self._scroll_accum_x) >= step:
-                    h_ticks = int(self._scroll_accum_x / step)
-                    self._scroll_accum_x -= h_ticks * step
+                # 2. Continuous Horizontal Smooth Scrolling
+                self._scroll_hi_res_accum_x += dx * scale
+                if abs(self._scroll_hi_res_accum_x) >= 1.0:
+                    hi_val_x = int(self._scroll_hi_res_accum_x)
+                    self._scroll_hi_res_accum_x -= float(hi_val_x)
                     # In Linux evdev REL_HWHEEL: +1 = right, -1 = left
-                    # Standard: moving pen right (dx > 0) scrolls right (+1)
-                    h_val = -h_ticks if self.config.scroll_natural else h_ticks
+                    # Standard: moving pen right (dx > 0) scrolls right (positive)
+                    hi_wheel_x = -hi_val_x if self.config.scroll_natural else hi_val_x
+
                     if self.mouse_dev:
-                        self.mouse_dev.write(ecodes.EV_REL, ecodes.REL_HWHEEL, h_val)
                         if hasattr(ecodes, 'REL_HWHEEL_HI_RES'):
-                            self.mouse_dev.write(ecodes.EV_REL, ecodes.REL_HWHEEL_HI_RES, h_val * 120)
+                            self.mouse_dev.write(ecodes.EV_REL, ecodes.REL_HWHEEL_HI_RES, hi_wheel_x)
+
+                        self._scroll_discrete_accum_x += hi_wheel_x
+                        if abs(self._scroll_discrete_accum_x) >= 120:
+                            disc_h_ticks = int(self._scroll_discrete_accum_x / 120)
+                            self._scroll_discrete_accum_x -= disc_h_ticks * 120
+                            self.mouse_dev.write(ecodes.EV_REL, ecodes.REL_HWHEEL, disc_h_ticks)
                         self.mouse_dev.syn()
 
             # Keep pen cursor locked at initial scroll anchor and suppress accidental touches/draws
@@ -281,8 +300,10 @@ class VeikkUinputManager:
             self._scroll_active = False
             self._scroll_last_x = None
             self._scroll_last_y = None
-            self._scroll_accum_x = 0.0
-            self._scroll_accum_y = 0.0
+            self._scroll_hi_res_accum_x = 0.0
+            self._scroll_hi_res_accum_y = 0.0
+            self._scroll_discrete_accum_x = 0
+            self._scroll_discrete_accum_y = 0
             self._scroll_frozen_x = None
             self._scroll_frozen_y = None
             # Re-anchor distance scaling to avoid jump
@@ -341,8 +362,10 @@ class VeikkUinputManager:
         self._scroll_active = False
         self._scroll_last_x = None
         self._scroll_last_y = None
-        self._scroll_accum_x = 0.0
-        self._scroll_accum_y = 0.0
+        self._scroll_hi_res_accum_x = 0.0
+        self._scroll_hi_res_accum_y = 0.0
+        self._scroll_discrete_accum_x = 0
+        self._scroll_discrete_accum_y = 0
         self._scroll_frozen_x = None
         self._scroll_frozen_y = None
 

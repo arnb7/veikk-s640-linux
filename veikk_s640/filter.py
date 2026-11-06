@@ -27,39 +27,71 @@ class AdaptiveSmoothingFilter:
         self._last_x: Optional[float] = None
         self._last_y: Optional[float] = None
         self._last_p: float = 0.0
+        self._prev_dx: float = 0.0
+        self._prev_dy: float = 0.0
 
     def reset(self):
         """Reset internal filter state when pen leaves sensing range."""
         self._last_x = None
         self._last_y = None
         self._last_p = 0.0
+        self._prev_dx = 0.0
+        self._prev_dy = 0.0
 
-    def filter_position(self, raw_x: int, raw_y: int) -> Tuple[int, int]:
-        """Apply adaptive smoothing to (X, Y) coordinates."""
+    def filter_position(self, raw_x: int, raw_y: int, is_touch: bool = False) -> Tuple[int, int]:
+        """Apply adaptive smoothing to (X, Y) coordinates with inking precision.
+
+        Args:
+            raw_x: Raw digitizer X coordinate.
+            raw_y: Raw digitizer Y coordinate.
+            is_touch: True when stylus tip touches the tablet (writing/drawing mode).
+                      On contact, deadzone is zeroed and sharp corners are preserved
+                      without rounding off letter vertices.
+        """
         if not self.enabled or self.smoothing_factor <= 0.0:
             self._last_x = float(raw_x)
             self._last_y = float(raw_y)
+            self._prev_dx = 0.0
+            self._prev_dy = 0.0
             return raw_x, raw_y
 
         if self._last_x is None or self._last_y is None:
             self._last_x = float(raw_x)
             self._last_y = float(raw_y)
+            self._prev_dx = 0.0
+            self._prev_dy = 0.0
             return raw_x, raw_y
 
         dx = float(raw_x) - self._last_x
         dy = float(raw_y) - self._last_y
         dist = math.hypot(dx, dy)
 
-        # Micro-jitter deadzone suppression
-        if dist <= self.deadzone:
+        # On contact (writing/drawing), deadzone MUST be 0 so small letter details
+        # and fine cursive loops are never swallowed or quantized into staircases.
+        effective_deadzone = 0.0 if is_touch else float(self.deadzone)
+        if effective_deadzone > 0 and dist <= effective_deadzone:
             return int(round(self._last_x)), int(round(self._last_y))
+
+        # Sharp turn / corner detection for crisp handwriting
+        # When writing letters ('r', 'v', 'w', crossing 't', dots), sharp angle changes
+        # must snap immediately to avoid rounding off vertices into mushy curves.
+        prev_dist = math.hypot(self._prev_dx, self._prev_dy)
+        if is_touch and prev_dist > 5.0 and dist > 5.0:
+            cos_theta = (self._prev_dx * dx + self._prev_dy * dy) / (prev_dist * dist)
+            if cos_theta < 0.45:
+                # Sharp inflection angle (> ~63 degrees): snap directly to vertex
+                self._last_x = float(raw_x)
+                self._last_y = float(raw_y)
+                self._prev_dx = dx
+                self._prev_dy = dy
+                return raw_x, raw_y
 
         # Speed-adaptive alpha:
         # At zero velocity beyond deadzone, alpha = alpha_min (smoothest).
         # At high velocity (flicks), alpha approaches 1.0 (zero latency).
-        alpha_min = 1.0 - 0.85 * self.smoothing_factor
-        speed_threshold = 40.0 + 200.0 * self.smoothing_factor
-        effective_dist = dist - self.deadzone
+        alpha_min = 1.0 - 0.75 * self.smoothing_factor
+        speed_threshold = 30.0 + 160.0 * self.smoothing_factor
+        effective_dist = max(0.0, dist - effective_deadzone)
         ratio = min(1.0, effective_dist / speed_threshold)
         alpha = alpha_min + (1.0 - alpha_min) * ratio
 
@@ -68,6 +100,8 @@ class AdaptiveSmoothingFilter:
 
         self._last_x = new_x
         self._last_y = new_y
+        self._prev_dx = dx
+        self._prev_dy = dy
         return int(round(new_x)), int(round(new_y))
 
     def filter_pressure(self, raw_p: int) -> int:

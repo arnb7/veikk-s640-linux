@@ -181,8 +181,10 @@ class TestVeikkUinputManager(unittest.TestCase):
         mgr.pen_dev.write.assert_any_call(ecodes.EV_ABS, ecodes.ABS_Y, 5000)
         mgr.pen_dev.write.assert_any_call(ecodes.EV_KEY, ecodes.BTN_TOUCH, 0)
 
-        # mouse_dev MUST have received REL_WHEEL down (-2)
+        # mouse_dev MUST have received REL_WHEEL down (-2) and REL_WHEEL_HI_RES (-320)
         mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_WHEEL, -2)
+        if hasattr(ecodes, 'REL_WHEEL_HI_RES'):
+            mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_WHEEL_HI_RES, -320)
         mgr.mouse_dev.syn.assert_called()
 
         # Step 5: User lifts pen up to hover (tip_down=False, pressure=0)

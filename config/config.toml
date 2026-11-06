@@ -26,12 +26,12 @@ max_pressure = 8191
 [smoothing]
 # Anti-jitter & adaptive motion filter:
 #   enable: true enables the filter; false passes raw coordinates.
-#   factor: 0.0 (raw/off) to 1.0 (heavy smoothing). 0.40 - 0.50 gives silky smooth tracking.
-#   deadzone: raw units (typically 3-6) to suppress ADC hand tremor when hovering still.
+#   factor: 0.0 (raw/off) to 1.0 (heavy smoothing). 0.30 - 0.40 provides crisp handwriting & snappy response.
+#   deadzone: raw units (typically 2-4) to suppress ADC hand tremor when hovering still (zeroed on contact).
 #   pressure_smoothing: 0.0 to 1.0 smooths pressure transitions for drawing lines.
 enable = true
-factor = 0.45
-deadzone = 4
+factor = 0.35
+deadzone = 3
 pressure_smoothing = 0.30
 
 [motion]
@@ -40,10 +40,10 @@ pressure_smoothing = 0.30
 #                Lower values (e.g. 0.50 - 0.75) scale down cursor travel distance
 #                relative to physical pen movement, eliminating exaggerated cursor jumps during hover.
 #   contact_scale: 0.10 to 2.00 (distance scale when pen tip is touching).
-#   lock_scales: true keeps contact_scale synchronized with hover_scale for seamless stroke continuity.
+#   lock_scales: false keeps contact_scale independent at 1.00 for true 1:1 handwriting precision.
 hover_scale = 1.00
 contact_scale = 1.00
-lock_scales = true
+lock_scales = false
 
 [buttons]
 # Stylus barrel button remapping (in-app input-remapper presets)

@@ -65,6 +65,30 @@ class TestAdaptiveSmoothingFilter(unittest.TestCase):
         new_pos = f.filter_position(5000, 5000)
         self.assertEqual(new_pos, (5000, 5000))
 
+    def test_touch_mode_bypasses_deadzone_for_fine_writing(self):
+        # In contact / touch mode (writing/drawing), deadzone must be zeroed
+        # so subtle micro-strokes and letter curves are never swallowed.
+        f = AdaptiveSmoothingFilter(enabled=True, smoothing_factor=0.35, deadzone=4)
+        f.filter_position(1000, 1000, is_touch=True)
+        # Small movement of 2 units (<= deadzone 4)
+        out_x, out_y = f.filter_position(1002, 1000, is_touch=True)
+        # With is_touch=True, movement is tracked and not frozen at 1000
+        self.assertGreater(out_x, 1000)
+
+    def test_sharp_inflection_snaps_instantly_for_crisp_letters(self):
+        # Sharp 90-degree corner (e.g. crossing a 't', apex of 'v') must snap
+        # immediately to prevent smoothing from turning vertices into round mush.
+        f = AdaptiveSmoothingFilter(enabled=True, smoothing_factor=0.5, deadzone=2)
+        f.filter_position(1000, 1000, is_touch=True)
+        # Stroke moving right along X
+        f.filter_position(1050, 1000, is_touch=True)
+        # Sudden 90 degree turn down along Y (1050, 1050)
+        # cos_theta between (50, 0) and (0, 50) is 0.0 < 0.45
+        snap_x, snap_y = f.filter_position(1050, 1050, is_touch=True)
+        self.assertEqual(snap_x, 1050)
+        self.assertEqual(snap_y, 1050)
+
 
 if __name__ == '__main__':
     unittest.main()
+

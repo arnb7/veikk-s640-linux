@@ -40,6 +40,12 @@ WORKFLOW_PRESETS = [
         "desc": "Button 1: Right-Click | Button 2: Pan & Scroll (Hold & Glide Pen)"
     },
     {
+        "name": "Handwriting & Note Taking (Xournal++ / OneNote)",
+        "b1": "keyboard:Control_L + z",
+        "b2": "pan_scroll",
+        "desc": "Button 1: Undo (Ctrl+Z) | Button 2: Pan & Smooth Page Scroll"
+    },
+    {
         "name": "Digital Painting (Krita / GIMP)",
         "b1": "mouse:btn_right",
         "b2": "keyboard:e",

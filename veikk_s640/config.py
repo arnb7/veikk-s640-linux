@@ -24,8 +24,8 @@ class TabletConfig:
 
     # Smoothing & Anti-Jitter configuration
     smoothing_enable: bool = True
-    smoothing_factor: float = 0.5    # 0.0 (raw) to 1.0 (heavy smoothing)
-    smoothing_deadzone: int = 4      # raw units (suppresses micro-tremors)
+    smoothing_factor: float = 0.35   # 0.0 (raw) to 1.0 (heavy smoothing; 0.35 = snappy handwriting)
+    smoothing_deadzone: int = 3      # raw units (suppresses micro-tremors during hover only)
     pressure_smoothing: float = 0.3  # 0.0 (raw) to 1.0 (smooth stroke dynamics)
 
     # Physical dimensions in mm (Veikk S640 is 6x4 inches ~ 152.4 x 101.6 mm)
@@ -40,8 +40,8 @@ class TabletConfig:
 
     # Motion & Hover distance scaling
     hover_scale: float = 1.0         # 0.10 to 2.00 (default 1.0 = 1:1 screen mapping)
-    contact_scale: float = 1.0       # 0.10 to 2.00
-    lock_motion_scales: bool = True  # Synchronize contact scale with hover scale
+    contact_scale: float = 1.0       # 0.10 to 2.00 (1.0 = true 1:1 inking mapping)
+    lock_motion_scales: bool = False # Independent contact scale ensures true 1:1 handwriting precision
 
     # Stylus button mapping (integrated input-remapper presets)
     button1_action: str = "mouse:btn_right"
