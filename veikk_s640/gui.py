@@ -381,6 +381,14 @@ class VeikkConfigWindow(Adw.ApplicationWindow):
 
         self.lock_scales_switch.connect("notify::active", _on_lock_toggled)
 
+        # Aspect Ratio Speed Equalization Switch
+        self.aspect_compensate_switch = Adw.SwitchRow(
+            title="Equalize Side-to-Side & Up-Down Travel Speeds",
+            subtitle="Compensates for 16:9 display geometry (ensures 1cm moved horizontally equals 1cm moved vertically)"
+        )
+        self.aspect_compensate_switch.set_active(self.config.aspect_compensate)
+        motion_group.add(self.aspect_compensate_switch)
+
         # Presets Row
         preset_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         p_50 = Gtk.Button(label="High Precision (0.50x)")
@@ -878,6 +886,7 @@ class VeikkConfigWindow(Adw.ApplicationWindow):
         self.config.hover_scale = round(self.hover_scale.get_value(), 2)
         self.config.contact_scale = round(self.contact_scale.get_value(), 2)
         self.config.lock_motion_scales = self.lock_scales_switch.get_active()
+        self.config.aspect_compensate = self.aspect_compensate_switch.get_active()
 
         curve_idx = self.curve_row.get_selected()
         self.config.pressure_curve = "gamma" if curve_idx == 1 else "linear"

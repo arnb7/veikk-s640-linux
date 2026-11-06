@@ -141,7 +141,7 @@ class VeikkUinputManager:
             scale = self.config.hover_scale if is_hover else self.config.contact_scale
 
         # 1:1 default mapping
-        if abs(scale - 1.0) < 0.001:
+        if abs(scale - 1.0) < 0.001 and not self.config.aspect_compensate:
             rx = base_x / max(1, self.config.output_max_x)
             ry = base_y / max(1, self.config.output_max_y)
             self._anchor_x = rx
@@ -165,8 +165,18 @@ class VeikkUinputManager:
         self._last_raw_rx = rx
         self._last_raw_ry = ry
 
-        target_rx = self._anchor_x + dx * scale
-        target_ry = self._anchor_y + dy * scale
+        scale_x = scale
+        scale_y = scale
+        if self.config.aspect_compensate:
+            if self.config.is_portrait:
+                # In portrait, horizontal travel is 2.667x faster than vertical on 16:9 displays.
+                # Equalize speeds by slowing horizontal travel by 1 / 2.667 = 0.375
+                scale_x *= 0.375
+            else:
+                scale_x *= 0.844
+
+        target_rx = self._anchor_x + dx * scale_x
+        target_ry = self._anchor_y + dy * scale_y
 
         out_rx = max(0.0, min(1.0, target_rx))
         out_ry = max(0.0, min(1.0, target_ry))

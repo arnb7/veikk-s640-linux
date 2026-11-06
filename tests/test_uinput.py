@@ -226,5 +226,27 @@ class TestVeikkUinputManager(unittest.TestCase):
         mgr.mouse_dev.syn.assert_called()
 
 
+    def test_aspect_compensate_slows_horizontal_in_portrait(self):
+        # Configure portrait mode with aspect_compensate=True
+        cfg = TabletConfig(
+            orientation=270,
+            hover_scale=1.0,
+            aspect_compensate=True,
+            max_x=30480,
+            max_y=20320
+        )
+        mgr = VeikkUinputManager(cfg)
+
+        # Initial anchor point
+        x0, y0 = mgr.compute_coordinates(10000, 10000, is_hover=True)
+
+        # Move 1000 units on hardware Y (which is horizontal axis on desk in 270°)
+        x1, y1 = mgr.compute_coordinates(10000, 11000, is_hover=True)
+
+        # Due to 0.375 aspect compensation, horizontal change is scaled to 375 units
+        dx_out = x1 - x0
+        self.assertAlmostEqual(dx_out, 375, delta=2)
+
+
 if __name__ == '__main__':
     unittest.main()
