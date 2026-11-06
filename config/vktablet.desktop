@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=VEIKK Tablet Settings
+GenericName=Graphic Tablet Configuration
+Comment=Configure VEIKK S640 smoothness, pressure dynamics, active area, and buttons
+Exec=/usr/local/bin/veikk-config
+Icon=vktablet
+Terminal=false
+Type=Application
+Categories=Settings;HardwareSettings;Graphics;
+Keywords=veikk;tablet;stylus;pen;drawing;s640;pressure;smoothness;
+StartupNotify=true

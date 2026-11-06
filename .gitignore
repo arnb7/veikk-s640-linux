@@ -1,0 +1,17 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller / Build artifacts
+build/
+dist/
+*.spec
+
+# Binary RPMs
+*.rpm
+
+# Logs and local overrides
+*.log
+.system_generated/
+EOF

@@ -1,0 +1,17 @@
+[Unit]
+Description=VEIKK S640 Tablet Userspace Driver Daemon
+Documentation=https://github.com/sezanzeb/input-remapper
+After=network.target systemd-udevd.service
+
+[Service]
+Type=simple
+Environment=PYTHONPATH=/usr/local/lib
+ExecStart=/usr/local/bin/veikk-s640d
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

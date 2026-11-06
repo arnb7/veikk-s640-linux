@@ -1,0 +1,16 @@
+# udev rules for VEIKK S640 Graphics Tablet and Userspace Driver
+# Location: /etc/udev/rules.d/99-veikk-s640.rules
+
+# 1. Grant access to uinput node
+KERNEL=="uinput", SUBSYSTEM=="misc", MODE:="0666", OPTIONS+="static_node=uinput", TAG+="uaccess"
+
+# 2. Allow unprivileged access to raw VEIKK USB device (2feb:0001)
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0001", MODE:="0666", TAG+="uaccess"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0001", MODE:="0666", TAG+="uaccess"
+
+# 3. Suppress the broken kernel HID mouse/pointer nodes on raw USB interfaces 0 & 1.
+# This prevents the cursor from getting locked to a single line at the edge of the screen!
+SUBSYSTEM=="input", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0001", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# 4. Allow access to our virtual uinput tablet & button devices and ensure libinput handles them
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="VEIKK S640 *", MODE:="0666", TAG+="uaccess", ENV{LIBINPUT_IGNORE_DEVICE}="0"

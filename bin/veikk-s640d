@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+"""VEIKK S640 Userspace Driver Daemon Entrypoint."""
+
+import sys
+import os
+import argparse
+import logging
+
+# Ensure project root is in sys.path
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+if "/usr/local/lib" not in sys.path:
+    sys.path.append("/usr/local/lib")
+
+# Fallback: scan user site-packages if running as a systemd service
+import glob
+for site_pkg in glob.glob("/home/*/.local/lib/python*/site-packages"):
+    if os.path.isdir(site_pkg) and site_pkg not in sys.path:
+        sys.path.append(site_pkg)
+
+from veikk_s640.driver import VeikkDriverDaemon
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="veikk-s640d: Userspace Linux Driver for VEIKK S640 Tablets"
+    )
+    parser.add_argument(
+        "-c", "--config", type=str, default=None,
+        help="Path to configuration TOML file"
+    )
+    parser.add_argument(
+        "--button-mode", choices=["native", "remapper"], default=None,
+        help="Override button mode ('native' for pen device, 'remapper' for input-remapper)"
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true",
+        help="Enable verbose / debug logging"
+    )
+
+    args = parser.parse_args()
+
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+
+    daemon = VeikkDriverDaemon(config_path=args.config)
+    if args.button_mode:
+        daemon.config.button_mode = args.button_mode
+
+    daemon.run()
+
+
+if __name__ == "__main__":
+    main()
