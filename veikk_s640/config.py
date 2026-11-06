@@ -78,23 +78,23 @@ class TabletConfig:
 
     @property
     def output_max_x(self) -> int:
-        """Virtual uinput coordinate maximum for X axis (swapped to 20320 in portrait)."""
-        return self.max_y if self.is_portrait else self.max_x
+        """Virtual uinput coordinate maximum for X axis (30480 units)."""
+        return self.max_x
 
     @property
     def output_max_y(self) -> int:
-        """Virtual uinput coordinate maximum for Y axis (swapped to 30480 in portrait)."""
-        return self.max_x if self.is_portrait else self.max_y
+        """Virtual uinput coordinate maximum for Y axis (20320 units)."""
+        return self.max_y
 
     @property
     def output_res_x(self) -> int:
         """Virtual uinput resolution for X axis in units/mm."""
-        return self.resolution_y if self.is_portrait else self.resolution_x
+        return self.resolution_x
 
     @property
     def output_res_y(self) -> int:
         """Virtual uinput resolution for Y axis in units/mm."""
-        return self.resolution_x if self.is_portrait else self.resolution_y
+        return self.resolution_y
 
     def apply_pressure_curve(self, raw_p: int) -> int:
         """Apply configured threshold, clamping, and gamma response."""
@@ -131,8 +131,8 @@ class TabletConfig:
         else:  # 0
             rx, ry = norm_x, norm_y
 
-        out_x = int(rx * self.output_max_x)
-        out_y = int(ry * self.output_max_y)
+        out_x = int(rx * self.max_x)
+        out_y = int(ry * self.max_y)
         return out_x, out_y
 
 

@@ -1114,7 +1114,13 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
             "Portrait Notes (Split-Screen 1:1)",
             "Part (Custom Sliders)..."
         ])
-        self.area_combo.set_selected(0)
+        is_custom_area = (
+            abs(self.config.area_min_x - 0.0) > 0.01 or
+            abs(self.config.area_max_x - 1.0) > 0.01 or
+            abs(self.config.area_min_y - 0.0) > 0.01 or
+            abs(self.config.area_max_y - 1.0) > 0.01
+        )
+        self.area_combo.set_selected(3 if is_custom_area else 0)
         self.area_combo.connect("notify::selected", self._on_working_area_changed)
         area_box.append(self.area_combo)
         right_card.append(area_box)
@@ -1127,7 +1133,7 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         sliders_group.append(sliders_lbl)
 
         # Min X / Max X
-        self.area_min_x_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.0, 0.9, 0.05)
+        self.area_min_x_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.0, 0.95, 0.01)
         self.area_min_x_scale.set_value(self.config.area_min_x)
         self.area_min_x_scale.connect("value-changed", self._on_area_slider_changed)
         row_x1 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -1135,7 +1141,7 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         row_x1.append(self.area_min_x_scale)
         sliders_group.append(row_x1)
 
-        self.area_max_x_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.1, 1.0, 0.05)
+        self.area_max_x_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.05, 1.0, 0.01)
         self.area_max_x_scale.set_value(self.config.area_max_x)
         self.area_max_x_scale.connect("value-changed", self._on_area_slider_changed)
         row_x2 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -1144,7 +1150,7 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         sliders_group.append(row_x2)
 
         # Min Y / Max Y
-        self.area_min_y_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.0, 0.9, 0.05)
+        self.area_min_y_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.0, 0.95, 0.01)
         self.area_min_y_scale.set_value(self.config.area_min_y)
         self.area_min_y_scale.connect("value-changed", self._on_area_slider_changed)
         row_y1 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -1152,7 +1158,7 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         row_y1.append(self.area_min_y_scale)
         sliders_group.append(row_y1)
 
-        self.area_max_y_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.1, 1.0, 0.05)
+        self.area_max_y_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.05, 1.0, 0.01)
         self.area_max_y_scale.set_value(self.config.area_max_y)
         self.area_max_y_scale.connect("value-changed", self._on_area_slider_changed)
         row_y2 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -1369,6 +1375,8 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         self.config.area_max_x = round(self.area_max_x_scale.get_value(), 3)
         self.config.area_min_y = round(self.area_min_y_scale.get_value(), 3)
         self.config.area_max_y = round(self.area_max_y_scale.get_value(), 3)
+        if self.area_combo.get_selected() != 3:
+            self.area_combo.set_selected(3)
         self.mapping_diagram.update_config(self.config)
 
     def _restore_mapping_defaults(self, _):

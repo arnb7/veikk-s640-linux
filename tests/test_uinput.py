@@ -243,9 +243,9 @@ class TestVeikkUinputManager(unittest.TestCase):
         # Move 1000 units on hardware Y (which is horizontal axis on desk in 270°)
         x1, y1 = mgr.compute_coordinates(10000, 11000, is_hover=True)
 
-        # Due to 0.375 aspect compensation, horizontal change is scaled to 375 units
+        # Due to 0.375 aspect compensation on 30480 max_x, horizontal change is scaled to 563 units
         dx_out = x1 - x0
-        self.assertAlmostEqual(dx_out, 375, delta=2)
+        self.assertAlmostEqual(dx_out, 563, delta=2)
 
 
 if __name__ == '__main__':
