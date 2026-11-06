@@ -95,6 +95,33 @@ class TestVeikkUinputManager(unittest.TestCase):
         # btn_dev must NOT be called
         mgr.btn_dev.write.assert_not_called()
 
+    def test_eraser_hold_activates_rubber_and_stylus_button(self):
+        cfg = TabletConfig(button_mode="remapper", button1_action="eraser_hold", button2_action="pan_scroll")
+        mgr = VeikkUinputManager(cfg)
+        mgr.pen_dev = MagicMock()
+        mgr.btn_dev = MagicMock()
+
+        # 1. Hover without button: BTN_TOOL_PEN is 1
+        rpt_hover = PenReport(in_proximity=True, tip_down=False, button1=False, button2=False, eraser=False, x=100, y=200, pressure=0)
+        mgr.dispatch(rpt_hover)
+        mgr.pen_dev.write.assert_any_call(ecodes.EV_KEY, ecodes.BTN_TOOL_PEN, 1)
+
+        # 2. Press Button 1 (eraser_hold): switches to BTN_TOOL_RUBBER and asserts BTN_STYLUS
+        rpt_eraser = PenReport(in_proximity=True, tip_down=True, button1=True, button2=False, eraser=False, x=120, y=220, pressure=400)
+        mgr.dispatch(rpt_eraser)
+        mgr.pen_dev.write.assert_any_call(ecodes.EV_KEY, ecodes.BTN_TOOL_PEN, 0)
+        mgr.pen_dev.write.assert_any_call(ecodes.EV_KEY, ecodes.BTN_TOOL_RUBBER, 1)
+        mgr.pen_dev.write.assert_any_call(ecodes.EV_KEY, ecodes.BTN_STYLUS, 1)
+        # Should NOT be sent to btn_dev (remapper)
+        mgr.btn_dev.write.assert_not_called()
+
+        # 3. Release Button 1: reverts to BTN_TOOL_PEN
+        rpt_release = PenReport(in_proximity=True, tip_down=True, button1=False, button2=False, eraser=False, x=130, y=230, pressure=400)
+        mgr.dispatch(rpt_release)
+        mgr.pen_dev.write.assert_any_call(ecodes.EV_KEY, ecodes.BTN_STYLUS, 0)
+        mgr.pen_dev.write.assert_any_call(ecodes.EV_KEY, ecodes.BTN_TOOL_RUBBER, 0)
+        mgr.pen_dev.write.assert_any_call(ecodes.EV_KEY, ecodes.BTN_TOOL_PEN, 1)
+
     def test_proximity_lifecycle(self):
         mgr = VeikkUinputManager(self.config_remapper)
         mgr.pen_dev = MagicMock()

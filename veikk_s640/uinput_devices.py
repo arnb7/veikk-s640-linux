@@ -31,6 +31,7 @@ class VeikkUinputManager:
         self._last_btn1 = False
         self._last_btn2 = False
         self._last_eraser = False
+        self._eraser_active = False
 
         # Pan / Scroll holding state
         self._scroll_active = False
@@ -62,6 +63,7 @@ class VeikkUinputManager:
 
         pen_keys = [
             ecodes.BTN_TOOL_PEN,
+            ecodes.BTN_TOOL_RUBBER,
             ecodes.BTN_TOUCH,
             ecodes.BTN_STYLUS,
             ecodes.BTN_STYLUS2,
@@ -226,6 +228,29 @@ class VeikkUinputManager:
         b2_is_scroll = (self.config.button2_action == "pan_scroll")
         scroll_btn_pressed = (b1_is_scroll and report.button1) or (b2_is_scroll and report.button2)
 
+        # Check if Eraser (Hold to Erase) is triggered
+        b1_is_eraser = (self.config.button1_action in ("eraser_hold", "stylus_eraser", "eraser"))
+        b2_is_eraser = (self.config.button2_action in ("eraser_hold", "stylus_eraser", "eraser"))
+        eraser_wanted = (b1_is_eraser and report.button1) or (b2_is_eraser and report.button2)
+
+        # Native Stylus 1/2 passthrough
+        b1_is_stylus1 = (self.config.button1_action == "stylus:btn_stylus")
+        b2_is_stylus1 = (self.config.button2_action == "stylus:btn_stylus")
+        b1_is_stylus2 = (self.config.button1_action == "stylus:btn_stylus2")
+        b2_is_stylus2 = (self.config.button2_action == "stylus:btn_stylus2")
+
+        if eraser_wanted != self._eraser_active:
+            self._eraser_active = eraser_wanted
+            if eraser_wanted:
+                # Switch tool to RUBBER and assert BTN_STYLUS for instant app detection (Rnote, Xournal++, Krita)
+                self.pen_dev.write(ecodes.EV_KEY, ecodes.BTN_TOOL_PEN, 0)
+                self.pen_dev.write(ecodes.EV_KEY, ecodes.BTN_TOOL_RUBBER, 1)
+                self.pen_dev.write(ecodes.EV_KEY, ecodes.BTN_STYLUS, 1)
+            else:
+                self.pen_dev.write(ecodes.EV_KEY, ecodes.BTN_STYLUS, 0)
+                self.pen_dev.write(ecodes.EV_KEY, ecodes.BTN_TOOL_RUBBER, 0)
+                self.pen_dev.write(ecodes.EV_KEY, ecodes.BTN_TOOL_PEN, 1)
+
         if self.config.scroll_require_touch:
             scroll_active = scroll_btn_pressed and bool(is_touch)
         else:
@@ -347,20 +372,36 @@ class VeikkUinputManager:
             self.pen_dev.write(ecodes.EV_ABS, ecodes.ABS_TILT_X, report.tilt_x)
             self.pen_dev.write(ecodes.EV_ABS, ecodes.ABS_TILT_Y, report.tilt_y)
 
-        # Button dispatching based on button_mode (skipping buttons consumed by pan_scroll)
-        eff_b1 = False if b1_is_scroll else report.button1
-        eff_b2 = False if b2_is_scroll else report.button2
+        # Button dispatching based on button_mode (skipping internal driver handlers)
+        b1_internal = b1_is_scroll or b1_is_eraser or b1_is_stylus1 or b1_is_stylus2
+        b2_internal = b2_is_scroll or b2_is_eraser or b2_is_stylus1 or b2_is_stylus2
+
+        eff_b1 = False if b1_internal else report.button1
+        eff_b2 = False if b2_internal else report.button2
+
+        # Stylus 1/2 passthrough if explicitly selected
+        if b1_is_stylus1 or b2_is_stylus1:
+            s1_down = (b1_is_stylus1 and report.button1) or (b2_is_stylus1 and report.button2)
+            if s1_down != self._last_btn1:
+                self.pen_dev.write(ecodes.EV_KEY, ecodes.BTN_STYLUS, 1 if s1_down else 0)
+                self._last_btn1 = s1_down
+
+        if b1_is_stylus2 or b2_is_stylus2:
+            s2_down = (b1_is_stylus2 and report.button1) or (b2_is_stylus2 and report.button2)
+            if s2_down != self._last_btn2:
+                self.pen_dev.write(ecodes.EV_KEY, ecodes.BTN_STYLUS2, 1 if s2_down else 0)
+                self._last_btn2 = s2_down
 
         if self.config.button_mode == "native":
-            # Send to pen uinput as standard tablet barrel buttons
-            if eff_b1 != self._last_btn1:
+            # Send non-internal buttons to pen uinput as standard tablet barrel buttons
+            if not (b1_is_stylus1 or b2_is_stylus1) and eff_b1 != self._last_btn1:
                 self.pen_dev.write(ecodes.EV_KEY, ecodes.BTN_STYLUS, 1 if eff_b1 else 0)
                 self._last_btn1 = eff_b1
-            if eff_b2 != self._last_btn2:
+            if not (b1_is_stylus2 or b2_is_stylus2) and eff_b2 != self._last_btn2:
                 self.pen_dev.write(ecodes.EV_KEY, ecodes.BTN_STYLUS2, 1 if eff_b2 else 0)
                 self._last_btn2 = eff_b2
         elif self.config.button_mode == "remapper":
-            # Send ONLY to Buttons uinput device, NEVER to Pen device
+            # Send ONLY non-internal buttons to Buttons uinput device, NEVER to Pen device
             btn_changed = False
             if eff_b1 != self._last_btn1:
                 self.btn_dev.write(ecodes.EV_KEY, ecodes.BTN_0, 1 if eff_b1 else 0)
@@ -394,6 +435,11 @@ class VeikkUinputManager:
         self._scroll_frozen_x = None
         self._scroll_frozen_y = None
 
+        if self._eraser_active:
+            self.pen_dev.write(ecodes.EV_KEY, ecodes.BTN_STYLUS, 0)
+            self.pen_dev.write(ecodes.EV_KEY, ecodes.BTN_TOOL_RUBBER, 0)
+            self._eraser_active = False
+
         self.pen_dev.write(ecodes.EV_KEY, ecodes.BTN_TOUCH, 0)
         self.pen_dev.write(ecodes.EV_ABS, ecodes.ABS_PRESSURE, 0)
 
@@ -419,6 +465,27 @@ class VeikkUinputManager:
         self._anchor_y = None
         self._last_raw_rx = None
         self._last_raw_ry = None
+        self.filter.reset()
+
+    def reset_state(self):
+        """Reset internal tracking state on reload or configuration change."""
+        self._scroll_active = False
+        self._scroll_last_x = None
+        self._scroll_last_y = None
+        self._scroll_hi_res_accum_x = 0.0
+        self._scroll_hi_res_accum_y = 0.0
+        self._scroll_discrete_accum_x = 0
+        self._scroll_discrete_accum_y = 0
+        self._scroll_frozen_x = None
+        self._scroll_frozen_y = None
+        self._anchor_x = None
+        self._anchor_y = None
+        self._last_raw_rx = None
+        self._last_raw_ry = None
+        self._last_btn1 = False
+        self._last_btn2 = False
+        self._last_eraser = False
+        self._eraser_active = False
         self.filter.reset()
 
     def update_config(self, config: TabletConfig):

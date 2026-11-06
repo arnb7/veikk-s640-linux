@@ -18,9 +18,12 @@ BUTTON_ACTIONS = [
     ("Middle Click / Pan", "mouse:btn_middle", "Middle mouse click, canvas pan"),
     ("Left Click", "mouse:btn_left", "Primary mouse button click"),
     ("Undo (Ctrl+Z)", "keyboard:Control_L + z", "Undo previous brush stroke / action"),
+    ("Eraser (Hold to Erase — Rnote / Xournal++ / Notes)", "eraser_hold", "Hold button while sliding pen to erase strokes in Rnote, Xournal++, OneNote, Obsidian"),
     ("Redo (Ctrl+Y)", "keyboard:Control_L + y", "Redo action"),
     ("Redo (Ctrl+Shift+Z)", "keyboard:Control_L + Shift_L + z", "Alternate redo shortcut"),
-    ("Eraser Mode (E)", "keyboard:e", "Toggle eraser in Krita, Photoshop, Blender"),
+    ("Eraser Tool Toggle (E — Krita, Photoshop)", "keyboard:e", "Toggle eraser tool in Krita, Photoshop, Blender, GIMP"),
+    ("Eraser Tool (Xournal++ Delete)", "keyboard:Delete", "Trigger delete / eraser tool in Xournal++"),
+    ("Eraser Tool (Rnote Ctrl+4)", "keyboard:Control_L + 4", "Switch tool slot to eraser in Rnote"),
     ("Brush Tool (B)", "keyboard:b", "Switch to brush tool"),
     ("Hand / Pan Canvas (Space)", "keyboard:space", "Pan view while button held down"),
     ("Color Picker (Alt)", "keyboard:Alt_L", "Eyedropper / color sampler in Krita/GIMP"),
@@ -28,22 +31,30 @@ BUTTON_ACTIONS = [
     ("Zoom Out (Ctrl -)", "keyboard:Control_L + minus", "Zoom out of active canvas"),
     ("Fit to Screen (Ctrl 0)", "keyboard:Control_L + 0", "Reset zoom to 100%"),
     ("Escape (Cancel)", "keyboard:Escape", "Cancel operation / clear tool"),
+    ("Native Stylus Button 1 (BTN_STYLUS)", "stylus:btn_stylus", "Direct hardware BTN_STYLUS barrel event"),
+    ("Native Stylus Button 2 (BTN_STYLUS2)", "stylus:btn_stylus2", "Direct hardware BTN_STYLUS2 barrel event"),
     ("Custom Keystroke / Macro", "custom", "Enter any custom keystroke or macro"),
     ("Disabled / Passthrough", "disabled", "Do not remap this button"),
 ]
 
 WORKFLOW_PRESETS = [
     {
+        "name": "Handwriting & Notes (Rnote / Xournal++ / OneNote)",
+        "b1": "eraser_hold",
+        "b2": "pan_scroll",
+        "desc": "Button 1: Hold to Erase | Button 2: Pan & Smooth Page Scroll"
+    },
+    {
+        "name": "Notes (Eraser + Undo)",
+        "b1": "eraser_hold",
+        "b2": "keyboard:Control_L + z",
+        "desc": "Button 1: Hold to Erase | Button 2: Instant Undo (Ctrl+Z)"
+    },
+    {
         "name": "Web & Document Browsing",
         "b1": "mouse:btn_right",
         "b2": "pan_scroll",
         "desc": "Button 1: Right-Click | Button 2: Pan & Scroll (Hold & Glide Pen)"
-    },
-    {
-        "name": "Handwriting & Note Taking (Xournal++ / OneNote)",
-        "b1": "keyboard:Control_L + z",
-        "b2": "pan_scroll",
-        "desc": "Button 1: Undo (Ctrl+Z) | Button 2: Pan & Smooth Page Scroll"
     },
     {
         "name": "Digital Painting (Krita / GIMP)",
@@ -97,7 +108,7 @@ def build_mapping_payload(
     mappings = []
 
     def _make_mapping(action: str, custom_val: str, code: int) -> Optional[dict]:
-        if action in ("disabled", "pan_scroll"):
+        if action in ("disabled", "pan_scroll", "eraser_hold", "stylus_eraser", "eraser", "stylus:btn_stylus", "stylus:btn_stylus2"):
             return None
         if action == "custom":
             symbol = custom_val.strip()
