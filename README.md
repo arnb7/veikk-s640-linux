@@ -148,16 +148,26 @@ Run the complete regression test suite:
 ```bash
 python3 -m unittest discover -s tests -v
 ```
-All 29 tests verify:
+All 39 tests verify:
 - Packet validation and proximity lifecycle
 - Coordinate transformation across rotations (0°, 90°, 180°, 270°) and active area crops
 - Speed-adaptive anti-jitter filtering and deadzone thresholding
 - Linear and gamma pressure curve transformations
 - Hover distance scaling and anchor tracking
 - Input-remapper payload generation and button indexing
+- Native stylus button mode (`BTN_STYLUS` / `BTN_STYLUS2`) and libinput keyboard capabilities
 
 ---
 
-## 6. License
+## 6. Rnote Integration
+
+For complete inking integration with Rnote (Rust + GTK4):
+- **Libwacom Database**: `libwacom/veikk-s640.tablet` provides GNOME Shell and libinput tablet recognition.
+- **Native Stylus Mode**: `button_mode = "native"` delivers barrel buttons directly to Rnote's canvas for seamless tool switching (Eraser/Selector).
+- **Inking Suite**: Full support for scribble-to-erase (G1), hold-to-snap shapes (G2/G12), custom pressure curves (G3/G14), and One-Euro stabilization (G4). See `rnote/docs/veikk_s640.md`.
+
+---
+
+## 7. License
 
 GPL-3.0 License. Open-source, clean-room implementation.
