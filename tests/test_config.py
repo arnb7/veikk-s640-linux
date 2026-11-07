@@ -8,7 +8,7 @@ class TestTabletConfig(unittest.TestCase):
 
     def test_default_config(self):
         cfg = TabletConfig()
-        self.assertEqual(cfg.button_mode, "remapper")
+        self.assertEqual(cfg.button_mode, "native")
         self.assertEqual(cfg.orientation, 0)
         self.assertEqual(cfg.max_x, 30480)
         self.assertEqual(cfg.max_y, 20320)

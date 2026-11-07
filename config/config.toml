@@ -4,13 +4,11 @@
 
 [tablet]
 # Button Mode:
-#   "remapper" (default): Physical barrel buttons are emitted ONLY to the
-#                         "VEIKK S640 Buttons" virtual device (as BTN_0, BTN_1, BTN_2).
-#                         They are never emitted to the Pen device, preventing double events
-#                         and letting input-remapper remap buttons cleanly.
-#   "native":             Physical barrel buttons are emitted to "VEIKK S640 Pen"
+#   "native" (default):   Physical barrel buttons are emitted to "VEIKK S640 Pen"
 #                         as standard stylus buttons (BTN_STYLUS, BTN_STYLUS2).
-button_mode = "remapper"
+#   "remapper":           Physical barrel buttons are emitted ONLY to the
+#                         "VEIKK S640 Buttons" virtual device (as BTN_0, BTN_1, BTN_2).
+button_mode = "native"
 
 # Orientation in degrees: 0, 90, 180, 270 (useful for left-handed orientation)
 orientation = 0

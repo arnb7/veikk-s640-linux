@@ -77,6 +77,8 @@ class VeikkUinputManager:
         props = []
         if self.config.input_prop == "direct":
             props.append(ecodes.INPUT_PROP_DIRECT)
+        else:
+            props.append(ecodes.INPUT_PROP_POINTER)
 
         self.pen_dev = UInput(
             events=pen_cap,
@@ -121,12 +123,18 @@ class VeikkUinputManager:
         # 1. Pen Device capabilities
         self._create_pen_device()
 
-        # 2. Buttons Device capabilities (dedicated device for input-remapper)
+        # 2. Buttons Device capabilities (dedicated device for input-remapper & system shortcuts)
         btn_cap = {
             ecodes.EV_KEY: [
-                ecodes.BTN_0,  # Pen button 1 (lower)
-                ecodes.BTN_1,  # Pen button 2 (upper)
-                ecodes.BTN_2,  # Pen button 3 / eraser
+                ecodes.BTN_0,  # Pen button 1 (lower) / Pad 1
+                ecodes.BTN_1,  # Pen button 2 (upper) / Pad 2
+                ecodes.BTN_2,  # Pen button 3 / eraser / Pad 3
+                ecodes.KEY_F13,
+                ecodes.KEY_F14,
+                ecodes.KEY_F15,
+                ecodes.KEY_F16,
+                ecodes.KEY_F17,
+                ecodes.KEY_F18,
             ]
         }
 

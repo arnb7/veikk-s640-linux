@@ -40,6 +40,14 @@ echo "[*] Installing configuration to /etc/veikk-s640/config.toml..."
 mkdir -p /etc/veikk-s640
 cp "$SCRIPT_DIR/config/config.toml" /etc/veikk-s640/config.toml
 
+# 2b. Install libwacom tablet database definition
+echo "[*] Installing libwacom definition to /etc/libwacom/ and /usr/share/libwacom/..."
+mkdir -p /etc/libwacom
+cp "$SCRIPT_DIR/libwacom/veikk-s640.tablet" /etc/libwacom/veikk-s640.tablet
+if [ -d /usr/share/libwacom ]; then
+    cp "$SCRIPT_DIR/libwacom/veikk-s640.tablet" /usr/share/libwacom/veikk-s640.tablet 2>/dev/null || true
+fi
+
 # 3. Install Python package and executables
 echo "[*] Installing driver binaries to /usr/local/bin/..."
 mkdir -p /usr/local/lib

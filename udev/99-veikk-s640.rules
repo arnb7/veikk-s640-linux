@@ -14,3 +14,5 @@ SUBSYSTEM=="input", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0001", ENV{LIBIN
 
 # 4. Allow access to our virtual uinput tablet & button devices and ensure libinput handles them
 SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="VEIKK S640 *", MODE:="0666", TAG+="uaccess", ENV{LIBINPUT_IGNORE_DEVICE}="0"
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="VEIKK S640 Pen", ENV{ID_INPUT_TABLET}="1", ENV{INPUT_PROP_POINTER}="1"
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="VEIKK S640 Buttons", ENV{ID_INPUT_KEY}="1"

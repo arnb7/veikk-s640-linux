@@ -14,13 +14,13 @@ CONFIG_DEFAULT_PATHS = [
 
 @dataclass
 class TabletConfig:
-    button_mode: Literal["native", "remapper"] = "remapper"
+    button_mode: Literal["native", "remapper"] = "native"
     orientation: int = 0  # 0, 90, 180, 270
     coord_width: int = 3
     max_x: int = 30480
     max_y: int = 20320
     max_pressure: int = 8191
-    input_prop: Literal["none", "direct"] = "none"
+    input_prop: Literal["none", "direct", "pointer"] = "pointer"
 
     # Smoothing & Anti-Jitter configuration
     smoothing_enable: bool = True
