@@ -61,7 +61,7 @@ autoload = true
 #   require_touch: true = only scroll when pen touches and slides (disables hover scrolling).
 sensitivity = 1.00
 natural = true
-require_touch = true
+require_touch = false
 
 [screen]
 # Output mapping: EDID triplet ["vendor", "product", "serial"]. ["", "", ""] for all/extended displays.

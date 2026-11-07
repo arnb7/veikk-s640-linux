@@ -141,13 +141,18 @@ def get_system_monitors() -> list[dict]:
 
 
 def apply_gnome_tablet_output(edid: list[str]) -> bool:
-    """Assign tablet devices in GNOME Mutter to target monitor output EDID."""
+    """Assign tablet and pointer devices in GNOME Mutter to target monitor output EDID."""
     try:
         val = f"['{edid[0]}', '{edid[1]}', '{edid[2]}']"
         for tablet_id in ("2feb:0001", "2feb:2000"):
             subprocess.run([
                 "gsettings", "set",
                 f"org.gnome.desktop.peripherals.tablet:/org/gnome/desktop/peripherals/tablets/{tablet_id}/",
+                "output", val
+            ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run([
+                "gsettings", "set",
+                f"org.gnome.desktop.peripherals.touchscreen:/org/gnome/desktop/peripherals/touchscreens/{tablet_id}/",
                 "output", val
             ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return True

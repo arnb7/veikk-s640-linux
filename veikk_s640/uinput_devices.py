@@ -87,6 +87,35 @@ class VeikkUinputManager:
             input_props=props
         )
 
+    def _create_mouse_device(self):
+        """Create virtual Mouse/Pointer UInput device with absolute coordinates and smooth wheel scrolling."""
+        mouse_cap = {
+            ecodes.EV_ABS: [
+                (ecodes.ABS_X, AbsInfo(value=0, min=0, max=self.config.output_max_x, fuzz=0, flat=0, resolution=self.config.output_res_x)),
+                (ecodes.ABS_Y, AbsInfo(value=0, min=0, max=self.config.output_max_y, fuzz=0, flat=0, resolution=self.config.output_res_y)),
+            ],
+            ecodes.EV_REL: [
+                ecodes.REL_X,
+                ecodes.REL_Y,
+                ecodes.REL_WHEEL,
+                ecodes.REL_HWHEEL,
+                getattr(ecodes, 'REL_WHEEL_HI_RES', 11),
+                getattr(ecodes, 'REL_HWHEEL_HI_RES', 12)
+            ],
+            ecodes.EV_KEY: [
+                ecodes.BTN_LEFT,
+                ecodes.BTN_RIGHT,
+                ecodes.BTN_MIDDLE
+            ]
+        }
+        self.mouse_dev = UInput(
+            events=mouse_cap,
+            name="VEIKK S640 Mouse",
+            vendor=0x2FEB,
+            product=0x0001,
+            version=1
+        )
+
     def setup(self):
         """Create virtual uinput devices for pen, buttons, and mouse scroll."""
         # 1. Pen Device capabilities
@@ -110,27 +139,8 @@ class VeikkUinputManager:
             version=1
         )
 
-        # 3. Mouse Device capabilities (for smooth wheel scrolling & mouse pan clicks)
-        mouse_cap = {
-            ecodes.EV_REL: [
-                ecodes.REL_WHEEL,
-                ecodes.REL_HWHEEL,
-                getattr(ecodes, 'REL_WHEEL_HI_RES', 11),
-                getattr(ecodes, 'REL_HWHEEL_HI_RES', 12)
-            ],
-            ecodes.EV_KEY: [
-                ecodes.BTN_LEFT,
-                ecodes.BTN_RIGHT,
-                ecodes.BTN_MIDDLE
-            ]
-        }
-        self.mouse_dev = UInput(
-            events=mouse_cap,
-            name="VEIKK S640 Mouse",
-            vendor=0x2FEB,
-            product=0x0001,
-            version=1
-        )
+        # 3. Mouse Device capabilities (hybrid absolute pointer + smooth wheel scrolling)
+        self._create_mouse_device()
 
 
     def compute_coordinates(self, raw_x: int, raw_y: int, is_hover: bool = False) -> tuple[int, int]:
@@ -268,6 +278,12 @@ class VeikkUinputManager:
                 self._scroll_discrete_accum_y = 0
                 self._scroll_frozen_x = x
                 self._scroll_frozen_y = y
+
+                # Sync mouse cursor position to stylus location on target monitor
+                if self.mouse_dev:
+                    self.mouse_dev.write(ecodes.EV_ABS, ecodes.ABS_X, x)
+                    self.mouse_dev.write(ecodes.EV_ABS, ecodes.ABS_Y, y)
+                    self.mouse_dev.syn()
             else:
                 last_x = self._scroll_last_x if self._scroll_last_x is not None else float(smooth_x)
                 last_y = self._scroll_last_y if self._scroll_last_y is not None else float(smooth_y)
@@ -300,10 +316,15 @@ class VeikkUinputManager:
                     hi_val_y = int(self._scroll_hi_res_accum_y)
                     self._scroll_hi_res_accum_y -= float(hi_val_y)
                     # In Linux evdev REL_WHEEL: +1 = up, -1 = down
-                    # Standard: moving pen down (dy > 0) scrolls page down (negative)
+                    # Natural scrolling (trackpad parity): moving pen up (dy < 0) scrolls page down (negative)
                     hi_wheel_y = hi_val_y if self.config.scroll_natural else -hi_val_y
 
                     if self.mouse_dev:
+                        # Position pointer under stylus on target display so compositor targets the active window
+                        if self._scroll_frozen_x is not None and self._scroll_frozen_y is not None:
+                            self.mouse_dev.write(ecodes.EV_ABS, ecodes.ABS_X, self._scroll_frozen_x)
+                            self.mouse_dev.write(ecodes.EV_ABS, ecodes.ABS_Y, self._scroll_frozen_y)
+
                         # Emit high-resolution sub-wheel events for liquid 60/120fps scrolling
                         if hasattr(ecodes, 'REL_WHEEL_HI_RES'):
                             self.mouse_dev.write(ecodes.EV_REL, ecodes.REL_WHEEL_HI_RES, hi_wheel_y)
@@ -322,10 +343,14 @@ class VeikkUinputManager:
                     hi_val_x = int(self._scroll_hi_res_accum_x)
                     self._scroll_hi_res_accum_x -= float(hi_val_x)
                     # In Linux evdev REL_HWHEEL: +1 = right, -1 = left
-                    # Standard: moving pen right (dx > 0) scrolls right (positive)
+                    # Natural scrolling (trackpad parity): moving pen left (dx < 0) scrolls right (positive)
                     hi_wheel_x = -hi_val_x if self.config.scroll_natural else hi_val_x
 
                     if self.mouse_dev:
+                        if self._scroll_frozen_x is not None and self._scroll_frozen_y is not None:
+                            self.mouse_dev.write(ecodes.EV_ABS, ecodes.ABS_X, self._scroll_frozen_x)
+                            self.mouse_dev.write(ecodes.EV_ABS, ecodes.ABS_Y, self._scroll_frozen_y)
+
                         if hasattr(ecodes, 'REL_HWHEEL_HI_RES'):
                             self.mouse_dev.write(ecodes.EV_REL, ecodes.REL_HWHEEL_HI_RES, hi_wheel_x)
 
@@ -502,6 +527,8 @@ class VeikkUinputManager:
 
         if self.pen_dev is None:
             self._create_pen_device()
+        if self.mouse_dev is None:
+            self._create_mouse_device()
 
     def close(self):
         """Cleanly close uinput devices."""

@@ -164,12 +164,13 @@ class TestVeikkUinputManager(unittest.TestCase):
         self.assertEqual(y1, 500)
 
     def test_pan_scroll_holding_emits_wheel_and_locks_cursor(self):
-        # Configure button2 as pan_scroll
+        # Configure button2 as pan_scroll with scroll_require_touch=True
         cfg = TabletConfig(
             button1_action="mouse:btn_right",
             button2_action="pan_scroll",
             scroll_sensitivity=1.0,
             scroll_natural=False,
+            scroll_require_touch=True,
             max_x=30000,
             max_y=20000,
             smoothing_enable=False
@@ -218,6 +219,39 @@ class TestVeikkUinputManager(unittest.TestCase):
         r5_lift = PenReport(in_proximity=True, tip_down=False, button1=False, button2=True, eraser=False, x=5000, y=5800, pressure=0)
         mgr.dispatch(r5_lift)
         self.assertFalse(mgr._scroll_active)
+
+    def test_pan_scroll_hover_mode_and_mouse_position_sync(self):
+        # By default scroll_require_touch is False: hover-scrolling works out of the box
+        cfg = TabletConfig(
+            button1_action="mouse:btn_right",
+            button2_action="pan_scroll",
+            scroll_sensitivity=1.0,
+            scroll_natural=True,
+            scroll_require_touch=False,
+            max_x=30000,
+            max_y=20000,
+            smoothing_enable=False
+        )
+        mgr = VeikkUinputManager(cfg)
+        mgr.pen_dev = MagicMock()
+        mgr.btn_dev = MagicMock()
+        mgr.mouse_dev = MagicMock()
+
+        # Step 1: Pen hovers at (6000, 7000) with button 2 held
+        r1 = PenReport(in_proximity=True, tip_down=False, button1=False, button2=True, eraser=False, x=6000, y=7000, pressure=0)
+        mgr.dispatch(r1)
+        self.assertTrue(mgr._scroll_active)
+
+        # mouse_dev MUST have synced its cursor position to target monitor coordinates (6000, 7000)
+        mgr.mouse_dev.write.assert_any_call(ecodes.EV_ABS, ecodes.ABS_X, 6000)
+        mgr.mouse_dev.write.assert_any_call(ecodes.EV_ABS, ecodes.ABS_Y, 7000)
+
+        # Step 2: Hover glide UP (dy = -600)
+        r2 = PenReport(in_proximity=True, tip_down=False, button1=False, button2=True, eraser=False, x=6000, y=6400, pressure=0)
+        mgr.dispatch(r2)
+        # 600 units / 300 = 2 scroll ticks down (REL_WHEEL = -2)
+        mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_WHEEL, -2)
+        mgr.mouse_dev.syn.assert_called()
 
     def test_pan_scroll_portrait_orientation_rotates_deltas(self):
         # Configure button2 as pan_scroll in 270 degree portrait orientation
