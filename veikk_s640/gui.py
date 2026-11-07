@@ -13,6 +13,7 @@ import time
 import math
 import subprocess
 import glob
+import re
 from typing import List, Tuple, Optional
 
 import gi
@@ -30,6 +31,129 @@ from .remapper import (
     apply_remapper_preset,
     is_service_active,
 )
+
+
+def get_system_monitors() -> list[dict]:
+    """Detect all active monitors and their EDID triplets dynamically."""
+    monitors = [
+        {
+            "id": "all",
+            "name": "All Displays",
+            "connector": "",
+            "width": 0,
+            "height": 0,
+            "is_primary": False,
+            "edid": ["", "", ""],
+            "label": "All Displays (Virtual Desktop)"
+        }
+    ]
+    detected = []
+
+    # 1. Query Mutter DisplayConfig D-Bus (live active state on GNOME Wayland)
+    try:
+        res = subprocess.run([
+            "gdbus", "call", "--session",
+            "--dest", "org.gnome.Mutter.DisplayConfig",
+            "--object-path", "/org/gnome/Mutter/DisplayConfig",
+            "--method", "org.gnome.Mutter.DisplayConfig.GetCurrentState"
+        ], capture_output=True, text=True, timeout=2)
+        if res.returncode == 0:
+            out = res.stdout
+            log_mons = re.findall(
+                r"\((\d+),\s*(\d+),\s*([0-9.]+),\s*(?:uint32\s*)?(\d+),\s*(true|false),\s*\[\('([^']+)',\s*'([^']+)',\s*'([^']+)',\s*'([^']+)'\)\],",
+                out
+            )
+            for lm in log_mons:
+                x, y, scale, transform, primary, conn, vendor, prod, serial = lm
+                is_pri = (primary.lower() == "true")
+
+                dname_m = re.search(rf"'{conn}'[^}}]+'display-name':\s*<'(?:[^']*)'>", out)
+                if dname_m:
+                    dname = dname_m.group(0).split("<")[1].strip("'>")
+                elif "edp" in conn.lower():
+                    dname = "Built-in Laptop Display"
+                elif prod and not prod.startswith("0x"):
+                    dname = f"{vendor} {prod}"
+                else:
+                    dname = f"External Display ({conn})"
+
+                res_m = re.search(rf"'{conn}'[^\]]*\[\('(\d+)x(\d+)@", out)
+                w = int(res_m.group(1)) if res_m else (1920 if is_pri else 1366)
+                h = int(res_m.group(2)) if res_m else (1080 if is_pri else 768)
+
+                detected.append({
+                    "id": conn,
+                    "name": dname,
+                    "connector": conn,
+                    "width": w,
+                    "height": h,
+                    "is_primary": is_pri,
+                    "edid": [vendor, prod, serial]
+                })
+    except Exception:
+        pass
+
+    # 2. Fallback to ~/.config/monitors.xml if Mutter D-Bus didn't return any
+    if not detected:
+        xml_path = os.path.expanduser("~/.config/monitors.xml")
+        if os.path.isfile(xml_path):
+            try:
+                import xml.etree.ElementTree as ET
+                tree = ET.parse(xml_path)
+                config = tree.getroot().find("configuration")
+                if config is not None:
+                    for lm in config.findall("logicalmonitor"):
+                        is_pri = (lm.find("primary") is not None and lm.find("primary").text.strip().lower() == "yes")
+                        mon = lm.find("monitor")
+                        if mon is None:
+                            continue
+                        mspec = mon.find("monitorspec")
+                        if mspec is None:
+                            continue
+                        conn = mspec.findtext("connector", "")
+                        vend = mspec.findtext("vendor", "")
+                        prod = mspec.findtext("product", "")
+                        serial = mspec.findtext("serial", "")
+                        mode = mon.find("mode")
+                        w = int(mode.findtext("width", "1920")) if mode else 1920
+                        h = int(mode.findtext("height", "1080")) if mode else 1080
+                        dname = "Built-in Laptop Display" if "edp" in conn.lower() else f"{vend} {prod}"
+                        detected.append({
+                            "id": conn,
+                            "name": dname,
+                            "connector": conn,
+                            "width": w,
+                            "height": h,
+                            "is_primary": is_pri,
+                            "edid": [vend, prod, serial]
+                        })
+            except Exception:
+                pass
+
+    # Sort so primary is Monitor 1, external is Monitor 2
+    detected.sort(key=lambda m: (not m["is_primary"], m["connector"]))
+    for i, m in enumerate(detected, 1):
+        m["index"] = i
+        m["label"] = f"Monitor {i}: {m['name']} ({m['connector']} {m['width']}×{m['height']})"
+        monitors.append(m)
+
+    return monitors
+
+
+def apply_gnome_tablet_output(edid: list[str]) -> bool:
+    """Assign tablet devices in GNOME Mutter to target monitor output EDID."""
+    try:
+        val = f"['{edid[0]}', '{edid[1]}', '{edid[2]}']"
+        for tablet_id in ("2feb:0001", "2feb:2000"):
+            subprocess.run([
+                "gsettings", "set",
+                f"org.gnome.desktop.peripherals.tablet:/org/gnome/desktop/peripherals/tablets/{tablet_id}/",
+                "output", val
+            ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except Exception:
+        return False
+
 
 # ==============================================================================
 # Material 3 Expressive Stylesheet
@@ -203,6 +327,7 @@ class MappingDiagramWidget(Gtk.DrawingArea):
     def __init__(self, config: TabletConfig):
         super().__init__()
         self.config = config
+        self.monitor_label = ""
         self.set_hexpand(True)
         self.set_vexpand(True)
         self.set_content_height(330)
@@ -282,6 +407,15 @@ class MappingDiagramWidget(Gtk.DrawingArea):
         scr_box_y = mon_y
         scr_box_w = mon_w
         scr_box_h = mon_h
+
+        # Active Monitor Label on Screen
+        if getattr(self, "monitor_label", ""):
+            cr.set_source_rgba(0.95, 0.98, 1.0, 0.90)
+            cr.select_font_face("sans-serif", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+            cr.set_font_size(11.0)
+            extents = cr.text_extents(self.monitor_label)
+            cr.move_to(mon_x + (mon_w - extents.width) / 2.0, mon_y + 18.0)
+            cr.show_text(self.monitor_label)
 
         # ----------------------------------------------------------------------
         # 2. VEIKK S640 Tablet Illustration (Bottom)
@@ -1171,20 +1305,48 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         mode_box.append(mode_radios)
         right_card.append(mode_box)
 
-        # 2. Screen Mapping (All, Monitor 1, Monitor 2, Part)
+        # 2. Screen Mapping (Dynamic active monitor detection)
         screen_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         screen_title = Gtk.Label(label="Screen Mapping")
         screen_title.add_css_class("m3-card-title")
         screen_title.set_xalign(0.0)
         screen_box.append(screen_title)
 
-        self.screen_combo = Gtk.DropDown.new_from_strings([
-            "All Displays (Extended)",
-            "Monitor 1 (Built-in eDP-1 1920x1080)",
-            "Monitor 2 (External Display)",
-            "Part Area..."
-        ])
-        self.screen_combo.set_selected(1)  # Default to eDP-1
+        self.monitors = get_system_monitors()
+        labels = [m["label"] for m in self.monitors]
+        self.screen_combo = Gtk.DropDown.new_from_strings(labels)
+
+        # Detect active monitor from config or gsettings
+        current_edid = None
+        if self.config.screen_output and any(self.config.screen_output):
+            current_edid = [str(x) for x in self.config.screen_output]
+        else:
+            try:
+                res = subprocess.run([
+                    "gsettings", "get",
+                    "org.gnome.desktop.peripherals.tablet:/org/gnome/desktop/peripherals/tablets/2feb:0001/",
+                    "output"
+                ], capture_output=True, text=True, timeout=1)
+                if res.returncode == 0:
+                    parts = re.findall(r"'([^']*)'", res.stdout)
+                    if len(parts) >= 3:
+                        current_edid = parts[:3]
+            except Exception:
+                pass
+
+        selected_idx = 0
+        if current_edid:
+            for i, mon in enumerate(self.monitors):
+                if mon["edid"] == current_edid:
+                    selected_idx = i
+                    break
+        elif len(self.monitors) > 1:
+            selected_idx = 1
+
+        self.screen_combo.set_selected(selected_idx)
+        if 0 <= selected_idx < len(self.monitors):
+            self.mapping_diagram.monitor_label = self.monitors[selected_idx].get("name", "")
+
         self.screen_combo.connect("notify::selected", self._on_screen_mapping_changed)
         screen_box.append(self.screen_combo)
         right_card.append(screen_box)
@@ -1593,23 +1755,16 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
 
     def _on_screen_mapping_changed(self, dropdown, _param):
         idx = dropdown.get_selected()
-        # idx 0 = All displays, 1 = eDP-1, 2 = DP-2
-        try:
-            if idx == 1:
-                subprocess.run([
-                    "gsettings", "set",
-                    "org.gnome.desktop.peripherals.tablet:/org/gnome/desktop/peripherals/tablets/2feb:0001/",
-                    "output", "['CMN', '0x1521', '0x00000000']"
-                ], check=False)
-            elif idx == 0:
-                subprocess.run([
-                    "gsettings", "set",
-                    "org.gnome.desktop.peripherals.tablet:/org/gnome/desktop/peripherals/tablets/2feb:0001/",
-                    "output", "['', '', '']"
-                ], check=False)
-        except Exception:
-            pass
-        self.mapping_diagram.update_config(self.config)
+        if hasattr(self, "monitors") and 0 <= idx < len(self.monitors):
+            target_mon = self.monitors[idx]
+            edid = target_mon["edid"]
+            self.config.screen_output = edid
+            apply_gnome_tablet_output(edid)
+            if hasattr(self, "mapping_diagram"):
+                self.mapping_diagram.monitor_label = target_mon.get("name", "")
+                self.mapping_diagram.update_config(self.config)
+        else:
+            self.mapping_diagram.update_config(self.config)
 
     def _on_working_area_changed(self, dropdown, _param):
         idx = dropdown.get_selected()
@@ -1689,7 +1844,8 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
     def _restore_mapping_defaults(self, _):
         self.radio_right.set_active(True)
         self._set_area_preset(0)
-        self.screen_combo.set_selected(1)
+        default_idx = 1 if (hasattr(self, "monitors") and len(self.monitors) > 1) else 0
+        self.screen_combo.set_selected(default_idx)
         self.config.area_min_x = 0.0
         self.config.area_max_x = 1.0
         self.config.area_min_y = 0.0
@@ -1892,7 +2048,10 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         self.config.lock_motion_scales = self.lock_scales_check.get_active()
         self.config.aspect_compensate = self.aspect_compensate_check.get_active()
 
-        # 5. Persist to disk (both user directory and system /etc if writable)
+        # 5. Apply display monitor mapping
+        self._on_screen_mapping_changed(self.screen_combo, None)
+
+        # 6. Persist to disk (both user directory and system /etc if writable)
         save_config(self.config)
         try:
             if os.access("/etc/veikk-s640/config.toml", os.W_OK):
@@ -1936,10 +2095,6 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
                 custom2=self.config.button2_custom,
                 autoload=self.config.button_autoload
             )
-
-        # 8. Re-apply display monitor mapping
-        self._on_screen_mapping_changed(self.screen_combo, None)
-
         self.mapping_diagram.update_config(self.config)
         self._refresh_hardware_status()
         toast = Adw.Toast.new("Settings applied and reloaded immediately.")

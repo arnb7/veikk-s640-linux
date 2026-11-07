@@ -63,6 +63,10 @@ sensitivity = 1.00
 natural = true
 require_touch = true
 
+[screen]
+# Output mapping: EDID triplet ["vendor", "product", "serial"]. ["", "", ""] for all/extended displays.
+output = ["", "", ""]
+
 [area]
 # Active area crop ratios (0.0 to 1.0)
 min_x = 0.0

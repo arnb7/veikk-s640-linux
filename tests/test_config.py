@@ -91,6 +91,24 @@ class TestTabletConfig(unittest.TestCase):
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
 
+    def test_screen_output_config_serialization(self):
+        import tempfile
+        import os
+        from veikk_s640.config import save_config, load_config
+
+        cfg = TabletConfig(screen_output=["IEL", "ZedAir14", "0x01010101"])
+        with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".toml") as f:
+            tmp_path = f.name
+
+        try:
+            save_config(cfg, tmp_path)
+            loaded = load_config(tmp_path)
+            self.assertEqual(loaded.screen_output, ["IEL", "ZedAir14", "0x01010101"])
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+
 
 if __name__ == '__main__':
     unittest.main()
