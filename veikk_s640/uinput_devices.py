@@ -281,8 +281,9 @@ class VeikkUinputManager:
 
                 # Sync mouse cursor position to stylus location on target monitor
                 if self.mouse_dev:
-                    self.mouse_dev.write(ecodes.EV_ABS, ecodes.ABS_X, x)
-                    self.mouse_dev.write(ecodes.EV_ABS, ecodes.ABS_Y, y)
+                    desk_x, desk_y = self.config.get_desktop_pointer_coordinates(x, y)
+                    self.mouse_dev.write(ecodes.EV_ABS, ecodes.ABS_X, desk_x)
+                    self.mouse_dev.write(ecodes.EV_ABS, ecodes.ABS_Y, desk_y)
                     self.mouse_dev.syn()
             else:
                 last_x = self._scroll_last_x if self._scroll_last_x is not None else float(smooth_x)
@@ -315,15 +316,15 @@ class VeikkUinputManager:
                 if abs(self._scroll_hi_res_accum_y) >= 1.0:
                     hi_val_y = int(self._scroll_hi_res_accum_y)
                     self._scroll_hi_res_accum_y -= float(hi_val_y)
-                    # In Linux evdev REL_WHEEL: +1 = up, -1 = down
-                    # Natural scrolling (trackpad parity): moving pen up (dy < 0) scrolls page down (negative)
-                    hi_wheel_y = hi_val_y if self.config.scroll_natural else -hi_val_y
+                    # Trackpad parity: moving pen UP (dy < 0) scrolls page DOWN (positive tick)
+                    hi_wheel_y = -hi_val_y if self.config.scroll_natural else hi_val_y
 
                     if self.mouse_dev:
                         # Position pointer under stylus on target display so compositor targets the active window
                         if self._scroll_frozen_x is not None and self._scroll_frozen_y is not None:
-                            self.mouse_dev.write(ecodes.EV_ABS, ecodes.ABS_X, self._scroll_frozen_x)
-                            self.mouse_dev.write(ecodes.EV_ABS, ecodes.ABS_Y, self._scroll_frozen_y)
+                            desk_x, desk_y = self.config.get_desktop_pointer_coordinates(self._scroll_frozen_x, self._scroll_frozen_y)
+                            self.mouse_dev.write(ecodes.EV_ABS, ecodes.ABS_X, desk_x)
+                            self.mouse_dev.write(ecodes.EV_ABS, ecodes.ABS_Y, desk_y)
 
                         # Emit high-resolution sub-wheel events for liquid 60/120fps scrolling
                         if hasattr(ecodes, 'REL_WHEEL_HI_RES'):
@@ -342,14 +343,14 @@ class VeikkUinputManager:
                 if abs(self._scroll_hi_res_accum_x) >= 1.0:
                     hi_val_x = int(self._scroll_hi_res_accum_x)
                     self._scroll_hi_res_accum_x -= float(hi_val_x)
-                    # In Linux evdev REL_HWHEEL: +1 = right, -1 = left
-                    # Natural scrolling (trackpad parity): moving pen left (dx < 0) scrolls right (positive)
-                    hi_wheel_x = -hi_val_x if self.config.scroll_natural else hi_val_x
+                    # Trackpad parity: moving pen RIGHT (dx > 0) scrolls page LEFT (positive tick)
+                    hi_wheel_x = hi_val_x if self.config.scroll_natural else -hi_val_x
 
                     if self.mouse_dev:
                         if self._scroll_frozen_x is not None and self._scroll_frozen_y is not None:
-                            self.mouse_dev.write(ecodes.EV_ABS, ecodes.ABS_X, self._scroll_frozen_x)
-                            self.mouse_dev.write(ecodes.EV_ABS, ecodes.ABS_Y, self._scroll_frozen_y)
+                            desk_x, desk_y = self.config.get_desktop_pointer_coordinates(self._scroll_frozen_x, self._scroll_frozen_y)
+                            self.mouse_dev.write(ecodes.EV_ABS, ecodes.ABS_X, desk_x)
+                            self.mouse_dev.write(ecodes.EV_ABS, ecodes.ABS_Y, desk_y)
 
                         if hasattr(ecodes, 'REL_HWHEEL_HI_RES'):
                             self.mouse_dev.write(ecodes.EV_REL, ecodes.REL_HWHEEL_HI_RES, hi_wheel_x)

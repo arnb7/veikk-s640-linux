@@ -110,5 +110,16 @@ class TestTabletConfig(unittest.TestCase):
 
 
 
+    def test_desktop_pointer_coordinates_projection(self):
+        cfg = TabletConfig(screen_output=["IEL", "ZedAir14", "0x01010101"], max_x=30480, max_y=20320)
+        # Center of tablet
+        mx, my = cfg.get_desktop_pointer_coordinates(15240, 10160)
+        # On 3286x1080 desktop with DP-2 at (1920, 199, 1366, 768):
+        # px = 1920 + 0.5 * 1366 = 2603 -> 2603 / 3286 * 30480 = 24144
+        # py = 199 + 0.5 * 768 = 583 -> 583 / 1080 * 20320 = 10969
+        self.assertAlmostEqual(mx, 24144, delta=10)
+        self.assertAlmostEqual(my, 10969, delta=10)
+
+
 if __name__ == '__main__':
     unittest.main()

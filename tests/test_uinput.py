@@ -200,7 +200,7 @@ class TestVeikkUinputManager(unittest.TestCase):
         self.assertEqual(mgr._scroll_frozen_y, 5000)
 
         # Step 4: User slides pen down to Y=5800 on surface while holding button 2
-        # Delta Y = +800 units -> step is 300 units -> 2 scroll ticks down (REL_WHEEL = -2)
+        # Delta Y = +800 units -> step is 300 units -> 2 scroll ticks (REL_WHEEL = 2)
         r4_slide = PenReport(in_proximity=True, tip_down=True, button1=False, button2=True, eraser=False, x=5000, y=5800, pressure=600)
         mgr.dispatch(r4_slide)
 
@@ -209,10 +209,10 @@ class TestVeikkUinputManager(unittest.TestCase):
         mgr.pen_dev.write.assert_any_call(ecodes.EV_ABS, ecodes.ABS_Y, 5000)
         mgr.pen_dev.write.assert_any_call(ecodes.EV_KEY, ecodes.BTN_TOUCH, 0)
 
-        # mouse_dev MUST have received REL_WHEEL down (-2) and REL_WHEEL_HI_RES (-320)
-        mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_WHEEL, -2)
+        # mouse_dev MUST have received REL_WHEEL (2) and REL_WHEEL_HI_RES (320)
+        mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_WHEEL, 2)
         if hasattr(ecodes, 'REL_WHEEL_HI_RES'):
-            mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_WHEEL_HI_RES, -320)
+            mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_WHEEL_HI_RES, 320)
         mgr.mouse_dev.syn.assert_called()
 
         # Step 5: User lifts pen up to hover (tip_down=False, pressure=0)
@@ -223,6 +223,7 @@ class TestVeikkUinputManager(unittest.TestCase):
     def test_pan_scroll_hover_mode_and_mouse_position_sync(self):
         # By default scroll_require_touch is False: hover-scrolling works out of the box
         cfg = TabletConfig(
+            screen_output=["NONE", "NONE", "NONE"],
             button1_action="mouse:btn_right",
             button2_action="pan_scroll",
             scroll_sensitivity=1.0,
@@ -242,15 +243,15 @@ class TestVeikkUinputManager(unittest.TestCase):
         mgr.dispatch(r1)
         self.assertTrue(mgr._scroll_active)
 
-        # mouse_dev MUST have synced its cursor position to target monitor coordinates (6000, 7000)
+        # mouse_dev MUST have synced its cursor position
         mgr.mouse_dev.write.assert_any_call(ecodes.EV_ABS, ecodes.ABS_X, 6000)
         mgr.mouse_dev.write.assert_any_call(ecodes.EV_ABS, ecodes.ABS_Y, 7000)
 
         # Step 2: Hover glide UP (dy = -600)
         r2 = PenReport(in_proximity=True, tip_down=False, button1=False, button2=True, eraser=False, x=6000, y=6400, pressure=0)
         mgr.dispatch(r2)
-        # 600 units / 300 = 2 scroll ticks down (REL_WHEEL = -2)
-        mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_WHEEL, -2)
+        # 600 units / 300 = 2 scroll ticks down (REL_WHEEL = 2)
+        mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_WHEEL, 2)
         mgr.mouse_dev.syn.assert_called()
 
     def test_pan_scroll_portrait_orientation_rotates_deltas(self):
@@ -280,9 +281,9 @@ class TestVeikkUinputManager(unittest.TestCase):
         r2 = PenReport(in_proximity=True, tip_down=True, button1=False, button2=True, eraser=False, x=5000, y=5000, pressure=600)
         mgr.dispatch(r2)
 
-        mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_WHEEL, -2)
+        mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_WHEEL, 2)
         if hasattr(ecodes, 'REL_WHEEL_HI_RES'):
-            mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_WHEEL_HI_RES, -320)
+            mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_WHEEL_HI_RES, 320)
         mgr.mouse_dev.syn.assert_called()
 
     def test_pan_scroll_natural_trackpad_parity(self):
@@ -307,14 +308,14 @@ class TestVeikkUinputManager(unittest.TestCase):
         self.assertTrue(mgr._scroll_active)
 
         # Step 2: Slide pen UP (dy = -800)
-        # On trackpad, moving up scrolls DOWN (REL_WHEEL = -2)
+        # On trackpad, moving up scrolls DOWN (REL_WHEEL = 2)
         r2 = PenReport(in_proximity=True, tip_down=True, button1=False, button2=True, eraser=False, x=5000, y=4200, pressure=600)
         mgr.dispatch(r2)
-        mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_WHEEL, -2)
+        mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_WHEEL, 2)
 
-        # Step 3: Slide pen LEFT (dx = -800)
-        # On trackpad, moving left scrolls RIGHT (REL_HWHEEL = +2)
-        r3 = PenReport(in_proximity=True, tip_down=True, button1=False, button2=True, eraser=False, x=4200, y=4200, pressure=600)
+        # Step 3: Slide pen RIGHT (dx = +800)
+        # On trackpad, moving right scrolls LEFT (REL_HWHEEL = 2)
+        r3 = PenReport(in_proximity=True, tip_down=True, button1=False, button2=True, eraser=False, x=5800, y=4200, pressure=600)
         mgr.dispatch(r3)
         mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_HWHEEL, 2)
 

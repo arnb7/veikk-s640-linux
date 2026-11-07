@@ -138,6 +138,82 @@ class TabletConfig:
         out_y = int(ry * self.max_y)
         return out_x, out_y
 
+    def get_desktop_pointer_coordinates(self, x: int, y: int) -> tuple[int, int]:
+        """Translate tablet coordinates to virtual desktop coordinates for absolute mouse positioning."""
+        rx = max(0.0, min(1.0, x / max(1, self.output_max_x)))
+        ry = max(0.0, min(1.0, y / max(1, self.output_max_y)))
+
+        target_edid = list(self.screen_output) if self.screen_output else ["", "", ""]
+        if not any(target_edid):
+            try:
+                import subprocess, ast
+                out = subprocess.check_output(
+                    ["dconf", "read", "/org/gnome/desktop/peripherals/tablets/2feb:0001/output"],
+                    stderr=subprocess.DEVNULL
+                ).decode().strip()
+                if out:
+                    parsed = ast.literal_eval(out)
+                    if isinstance(parsed, list) and len(parsed) >= 3:
+                        target_edid = parsed
+            except Exception:
+                pass
+
+        if not any(target_edid):
+            return x, y
+
+        try:
+            import xml.etree.ElementTree as ET
+            import glob
+            xml_candidates = [os.path.expanduser("~/.config/monitors.xml")]
+            for user_home in sorted(glob.glob("/home/*")):
+                cand = os.path.join(user_home, ".config/monitors.xml")
+                if cand not in xml_candidates:
+                    xml_candidates.append(cand)
+
+            xml_path = next((p for p in xml_candidates if os.path.isfile(p)), None)
+            if not xml_path:
+                return x, y
+
+            tree = ET.parse(xml_path)
+            config = tree.getroot().find("configuration")
+            if config is None:
+                return x, y
+
+            target_rect = None
+            max_w = 0
+            max_h = 0
+            for lm in config.findall("logicalmonitor"):
+                lx = int(lm.findtext("x", "0"))
+                ly = int(lm.findtext("y", "0"))
+                mon = lm.find("monitor")
+                if mon is None:
+                    continue
+                mspec = mon.find("monitorspec")
+                if mspec is None:
+                    continue
+                vend = mspec.findtext("vendor", "")
+                prod = mspec.findtext("product", "")
+                serial = mspec.findtext("serial", "")
+                mode = mon.find("mode")
+                w = int(mode.findtext("width", "1920")) if mode is not None else 1920
+                h = int(mode.findtext("height", "1080")) if mode is not None else 1080
+                max_w = max(max_w, lx + w)
+                max_h = max(max_h, ly + h)
+                if [vend, prod, serial] == target_edid:
+                    target_rect = (lx, ly, w, h)
+
+            if target_rect and max_w > 0 and max_h > 0:
+                tx, ty, tw, th = target_rect
+                px = tx + rx * tw
+                py = ty + ry * th
+                norm_dx = px / max_w
+                norm_dy = py / max_h
+                return int(norm_dx * self.output_max_x), int(norm_dy * self.output_max_y)
+        except Exception:
+            pass
+
+        return x, y
+
 
 def get_config_search_paths() -> list[str]:
     """Return prioritized list of configuration file paths."""
