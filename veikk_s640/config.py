@@ -53,7 +53,7 @@ class TabletConfig:
 
     # Pan / Scroll configuration (holding barrel button and moving pen)
     scroll_sensitivity: float = 1.0  # 0.1 to 3.0 (default 1.0)
-    scroll_natural: bool = False      # False = standard PC down-scroll, True = natural touch-style
+    scroll_natural: bool = True       # True = natural touch-style (laptop mousepad), False = standard PC wheel
     scroll_require_touch: bool = True # True = require touching pen tip to scroll (disables hover scrolling)
 
     # Pressure configuration

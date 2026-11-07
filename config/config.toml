@@ -57,10 +57,10 @@ autoload = true
 [scroll]
 # Pan / Scroll settings when holding a barrel button:
 #   sensitivity: 0.20 to 3.00 (default 1.0 = ~1.5mm movement per scroll tick).
-#   natural: false = standard PC wheel-down when gliding down; true = touchscreen/macOS inverted.
+#   natural: true = touchscreen/laptop mousepad natural scroll; false = legacy PC inverted.
 #   require_touch: true = only scroll when pen touches and slides (disables hover scrolling).
 sensitivity = 1.00
-natural = false
+natural = true
 require_touch = true
 
 [area]
