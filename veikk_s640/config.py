@@ -43,6 +43,8 @@ class TabletConfig:
     contact_scale: float = 1.0       # 0.10 to 2.00 (1.0 = true 1:1 inking mapping)
     lock_motion_scales: bool = False # Independent contact scale ensures true 1:1 handwriting precision
     aspect_compensate: bool = False  # Equalize horizontal and vertical cursor speeds on widescreen displays
+    cursor_invert_x: bool = False    # Invert horizontal cursor: Left causes Right
+    cursor_invert_y: bool = False    # Invert vertical cursor: Up causes Down
 
     # Stylus button mapping (integrated input-remapper presets)
     button1_action: str = "mouse:btn_right"
@@ -133,6 +135,11 @@ class TabletConfig:
             rx, ry = norm_y, 1.0 - norm_x
         else:  # 0
             rx, ry = norm_x, norm_y
+
+        if self.cursor_invert_x:
+            rx = 1.0 - rx
+        if self.cursor_invert_y:
+            ry = 1.0 - ry
 
         out_x = int(rx * self.max_x)
         out_y = int(ry * self.max_y)
@@ -302,6 +309,10 @@ def load_config(path: str | None = None) -> TabletConfig:
             cfg.lock_motion_scales = bool(motion["lock_scales"])
         if "aspect_compensate" in motion:
             cfg.aspect_compensate = bool(motion["aspect_compensate"])
+        if "cursor_invert_x" in motion:
+            cfg.cursor_invert_x = bool(motion["cursor_invert_x"])
+        if "cursor_invert_y" in motion:
+            cfg.cursor_invert_y = bool(motion["cursor_invert_y"])
 
         btn_sec = data.get("buttons", {})
         if "button1_action" in btn_sec:
@@ -369,6 +380,8 @@ hover_scale = {cfg.hover_scale:.2f}
 contact_scale = {cfg.contact_scale:.2f}
 lock_scales = {str(cfg.lock_motion_scales).lower()}
 aspect_compensate = {str(cfg.aspect_compensate).lower()}
+cursor_invert_x = {str(cfg.cursor_invert_x).lower()}
+cursor_invert_y = {str(cfg.cursor_invert_y).lower()}
 
 [buttons]
 button1_action = "{cfg.button1_action}"

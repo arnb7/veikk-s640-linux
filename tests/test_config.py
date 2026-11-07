@@ -121,5 +121,13 @@ class TestTabletConfig(unittest.TestCase):
         self.assertAlmostEqual(my, 10969, delta=10)
 
 
+    def test_cursor_inversion(self):
+        cfg = TabletConfig(max_x=1000, max_y=1000, cursor_invert_x=True, cursor_invert_y=True)
+        # Without inversion, (200, 300) -> (200, 300)
+        # With inversion, (200, 300) -> (800, 700): Left causes Right, Up causes Down
+        x, y = cfg.transform_coordinates(200, 300)
+        self.assertEqual((x, y), (800, 700))
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -1121,19 +1121,44 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
 
         btn_controls.append(b1_box)
 
-        # Pan / Scroll Hover Pan Toggle
-        hover_pan_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        hover_pan_box.set_margin_top(6)
+        # Pan / Scroll & Cursor Touchpad Controls
+        pan_opts_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        pan_opts_box.set_margin_top(8)
+
+        # 1. Work like Touchpad (Left causes Right, Up causes Down)
+        self.pen_scroll_natural_check = Gtk.CheckButton(label="Work like Touchpad (Left causes Right, Up causes Down)")
+        self.pen_scroll_natural_check.set_active(self.config.scroll_natural)
+        pan_opts_box.append(self.pen_scroll_natural_check)
+
+        touchpad_sub = Gtk.Label(label="When panning, moving pen left scrolls right and moving up scrolls down (touchpad parity).")
+        touchpad_sub.add_css_class("m3-card-sub")
+        touchpad_sub.set_xalign(0.0)
+        touchpad_sub.set_wrap(True)
+        pan_opts_box.append(touchpad_sub)
+
+        # 2. Hover Pan Toggle
         self.pen_scroll_touch_check = Gtk.CheckButton(label="Disable Hover Pan (Require Surface Contact)")
         self.pen_scroll_touch_check.set_active(self.config.scroll_require_touch)
-        hover_pan_box.append(self.pen_scroll_touch_check)
+        pan_opts_box.append(self.pen_scroll_touch_check)
 
-        hover_pan_sub = Gtk.Label(label="When checked, panning only works while touching the tablet (hover pan disabled).")
+        hover_pan_sub = Gtk.Label(label="Only pan when pen tip touches the tablet surface (disables air hover panning).")
         hover_pan_sub.add_css_class("m3-card-sub")
         hover_pan_sub.set_xalign(0.0)
         hover_pan_sub.set_wrap(True)
-        hover_pan_box.append(hover_pan_sub)
-        btn_controls.append(hover_pan_box)
+        pan_opts_box.append(hover_pan_sub)
+
+        # 3. Invert Cursor Movement Toggle
+        self.pen_cursor_invert_check = Gtk.CheckButton(label="Invert Cursor (Left causes Right, Up causes Down cursor)")
+        self.pen_cursor_invert_check.set_active(self.config.cursor_invert_x and self.config.cursor_invert_y)
+        pan_opts_box.append(self.pen_cursor_invert_check)
+
+        cursor_inv_sub = Gtk.Label(label="Invert pointer coordinates: moving pen left moves cursor right, moving up moves cursor down.")
+        cursor_inv_sub.add_css_class("m3-card-sub")
+        cursor_inv_sub.set_xalign(0.0)
+        cursor_inv_sub.set_wrap(True)
+        pan_opts_box.append(cursor_inv_sub)
+
+        btn_controls.append(pan_opts_box)
 
         stylus_box.append(btn_controls)
         left_card.append(stylus_box)
@@ -1605,9 +1630,14 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         self.scroll_sens_scale.set_draw_value(True)
         scroll_card.append(self.scroll_sens_scale)
 
-        self.scroll_natural_check = Gtk.CheckButton(label="Natural Scrolling (macOS / Touch style)")
+        self.scroll_natural_check = Gtk.CheckButton(label="Work like Touchpad (Left causes Right, Up causes Down)")
         self.scroll_natural_check.set_active(self.config.scroll_natural)
         scroll_card.append(self.scroll_natural_check)
+
+        nat_sub = Gtk.Label(label="Touchpad natural parity: Moving pen left scrolls right, moving pen up scrolls down")
+        nat_sub.add_css_class("m3-card-sub")
+        nat_sub.set_xalign(0.0)
+        scroll_card.append(nat_sub)
 
         self.scroll_touch_check = Gtk.CheckButton(label="Disable Hover Pan (Require Surface Contact)")
         self.scroll_touch_check.set_active(self.config.scroll_require_touch)
@@ -1619,6 +1649,16 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         scroll_card.append(touch_sub)
 
         # Sync checkboxes between Pen page and Function page
+        def _sync_natural_pen(cb):
+            if hasattr(self, "scroll_natural_check") and self.scroll_natural_check.get_active() != cb.get_active():
+                self.scroll_natural_check.set_active(cb.get_active())
+        self.pen_scroll_natural_check.connect("toggled", _sync_natural_pen)
+
+        def _sync_natural_func(cb):
+            if hasattr(self, "pen_scroll_natural_check") and self.pen_scroll_natural_check.get_active() != cb.get_active():
+                self.pen_scroll_natural_check.set_active(cb.get_active())
+        self.scroll_natural_check.connect("toggled", _sync_natural_func)
+
         def _sync_touch_pen(cb):
             if hasattr(self, "scroll_touch_check") and self.scroll_touch_check.get_active() != cb.get_active():
                 self.scroll_touch_check.set_active(cb.get_active())
@@ -1896,10 +1936,16 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         self.gamma_scale.set_value(1.0)
         self.thresh_scale.set_value(0)
         self.p_smooth_scale.set_value(0.15)
+        if hasattr(self, "pen_scroll_natural_check"):
+            self.pen_scroll_natural_check.set_active(True)
+        if hasattr(self, "scroll_natural_check"):
+            self.scroll_natural_check.set_active(True)
         if hasattr(self, "pen_scroll_touch_check"):
             self.pen_scroll_touch_check.set_active(False)
         if hasattr(self, "scroll_touch_check"):
             self.scroll_touch_check.set_active(False)
+        if hasattr(self, "pen_cursor_invert_check"):
+            self.pen_cursor_invert_check.set_active(False)
 
     def _set_motion_scale(self, scale_val: float):
         self.hover_scale.set_value(scale_val)
@@ -2086,6 +2132,10 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         self.config.contact_scale = round(self.contact_scale.get_value(), 2)
         self.config.lock_motion_scales = self.lock_scales_check.get_active()
         self.config.aspect_compensate = self.aspect_compensate_check.get_active()
+        if hasattr(self, "pen_cursor_invert_check"):
+            inv_cursor = self.pen_cursor_invert_check.get_active()
+            self.config.cursor_invert_x = inv_cursor
+            self.config.cursor_invert_y = inv_cursor
 
         # 5. Apply display monitor mapping
         self._on_screen_mapping_changed(self.screen_combo, None)
@@ -2191,16 +2241,37 @@ def handle_cli_commands() -> bool:
         print("[✓] Hover Pan ENABLED: Panning now works while hovering the pen in the air.")
         return True
 
+    if "--toggle-touchpad" in args or "--toggle-natural-scroll" in args:
+        cfg = load_config()
+        cfg.scroll_natural = not cfg.scroll_natural
+        _notify_daemon_reload(cfg)
+        status = "ENABLED (Left causes Right, Up causes Down)" if cfg.scroll_natural else "DISABLED (Standard PC Direction)"
+        print(f"[✓] Work like Touchpad (Natural Scroll): {status}")
+        return True
+
+    if "--toggle-cursor-invert" in args:
+        cfg = load_config()
+        new_inv = not (cfg.cursor_invert_x and cfg.cursor_invert_y)
+        cfg.cursor_invert_x = new_inv
+        cfg.cursor_invert_y = new_inv
+        _notify_daemon_reload(cfg)
+        status = "ENABLED (Left causes Right, Up causes Down cursor)" if new_inv else "DISABLED (Standard 1:1 cursor)"
+        print(f"[✓] Invert Cursor Movement: {status}")
+        return True
+
     if "--status" in args:
         cfg = load_config()
         hp = "Disabled (Requires contact)" if cfg.scroll_require_touch else "Enabled (Hover active)"
+        tp = "Enabled (Left->Right, Up->Down)" if cfg.scroll_natural else "Disabled (Standard PC Wheel)"
+        ci = "Inverted (Left->Right, Up->Down)" if (cfg.cursor_invert_x and cfg.cursor_invert_y) else "Normal (1:1)"
         print(
             f"VEIKK S640 Status:\n"
             f"  Orientation: {cfg.orientation}°\n"
             f"  Button 1: {cfg.button1_action}\n"
             f"  Button 2: {cfg.button2_action}\n"
-            f"  Natural Scroll: {cfg.scroll_natural}\n"
+            f"  Work like Touchpad: {tp}\n"
             f"  Hover Pan: {hp}\n"
+            f"  Cursor Inversion: {ci}\n"
             f"  Screen Output: {cfg.screen_output}"
         )
         return True
