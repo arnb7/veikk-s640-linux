@@ -351,8 +351,9 @@ class VeikkUinputManager:
                 if abs(self._scroll_hi_res_accum_x) >= 1.0:
                     hi_val_x = int(self._scroll_hi_res_accum_x)
                     self._scroll_hi_res_accum_x -= float(hi_val_x)
-                    # Trackpad parity: moving pen RIGHT (dx > 0) scrolls page LEFT (positive tick)
-                    hi_wheel_x = hi_val_x if self.config.scroll_natural else -hi_val_x
+                    # Trackpad parity: moving pen LEFT (dx < 0) scrolls page RIGHT (positive tick)
+                    # moving pen RIGHT (dx > 0) scrolls page LEFT (negative tick)
+                    hi_wheel_x = -hi_val_x if self.config.scroll_natural else hi_val_x
 
                     if self.mouse_dev:
                         if self._scroll_frozen_x is not None and self._scroll_frozen_y is not None:

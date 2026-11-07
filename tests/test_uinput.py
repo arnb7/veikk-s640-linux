@@ -313,11 +313,17 @@ class TestVeikkUinputManager(unittest.TestCase):
         mgr.dispatch(r2)
         mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_WHEEL, 2)
 
-        # Step 3: Slide pen RIGHT (dx = +800)
-        # On trackpad, moving right scrolls LEFT (REL_HWHEEL = 2)
-        r3 = PenReport(in_proximity=True, tip_down=True, button1=False, button2=True, eraser=False, x=5800, y=4200, pressure=600)
-        mgr.dispatch(r3)
+        # Step 3: Slide pen LEFT (dx = -800)
+        # On trackpad, moving left scrolls RIGHT (positive tick, REL_HWHEEL = 2)
+        r3_left = PenReport(in_proximity=True, tip_down=True, button1=False, button2=True, eraser=False, x=4200, y=4200, pressure=600)
+        mgr.dispatch(r3_left)
         mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_HWHEEL, 2)
+
+        # Step 4: Slide pen RIGHT (dx = +800)
+        # On trackpad, moving right scrolls LEFT (negative tick, REL_HWHEEL = -2)
+        r4_right = PenReport(in_proximity=True, tip_down=True, button1=False, button2=True, eraser=False, x=5000, y=4200, pressure=600)
+        mgr.dispatch(r4_right)
+        mgr.mouse_dev.write.assert_any_call(ecodes.EV_REL, ecodes.REL_HWHEEL, -2)
 
 
 

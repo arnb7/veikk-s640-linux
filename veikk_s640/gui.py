@@ -1121,6 +1121,20 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
 
         btn_controls.append(b1_box)
 
+        # Pan / Scroll Hover Pan Toggle
+        hover_pan_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        hover_pan_box.set_margin_top(6)
+        self.pen_scroll_touch_check = Gtk.CheckButton(label="Disable Hover Pan (Require Surface Contact)")
+        self.pen_scroll_touch_check.set_active(self.config.scroll_require_touch)
+        hover_pan_box.append(self.pen_scroll_touch_check)
+
+        hover_pan_sub = Gtk.Label(label="When checked, panning only works while touching the tablet (hover pan disabled).")
+        hover_pan_sub.add_css_class("m3-card-sub")
+        hover_pan_sub.set_xalign(0.0)
+        hover_pan_sub.set_wrap(True)
+        hover_pan_box.append(hover_pan_sub)
+        btn_controls.append(hover_pan_box)
+
         stylus_box.append(btn_controls)
         left_card.append(stylus_box)
 
@@ -1595,9 +1609,25 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         self.scroll_natural_check.set_active(self.config.scroll_natural)
         scroll_card.append(self.scroll_natural_check)
 
-        self.scroll_touch_check = Gtk.CheckButton(label="Require Surface Contact (Touch & Slide to scroll)")
+        self.scroll_touch_check = Gtk.CheckButton(label="Disable Hover Pan (Require Surface Contact)")
         self.scroll_touch_check.set_active(self.config.scroll_require_touch)
         scroll_card.append(self.scroll_touch_check)
+
+        touch_sub = Gtk.Label(label="Only pan when pen tip touches tablet surface (hover pan disabled)")
+        touch_sub.add_css_class("m3-card-sub")
+        touch_sub.set_xalign(0.0)
+        scroll_card.append(touch_sub)
+
+        # Sync checkboxes between Pen page and Function page
+        def _sync_touch_pen(cb):
+            if hasattr(self, "scroll_touch_check") and self.scroll_touch_check.get_active() != cb.get_active():
+                self.scroll_touch_check.set_active(cb.get_active())
+        self.pen_scroll_touch_check.connect("toggled", _sync_touch_pen)
+
+        def _sync_touch_func(cb):
+            if hasattr(self, "pen_scroll_touch_check") and self.pen_scroll_touch_check.get_active() != cb.get_active():
+                self.pen_scroll_touch_check.set_active(cb.get_active())
+        self.scroll_touch_check.connect("toggled", _sync_touch_func)
 
         # Anti-Jitter Smoothing & Deadzone
         j_title = Gtk.Label(label="Adaptive Anti-Jitter & Hardware Deadzone")
@@ -1866,6 +1896,10 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         self.gamma_scale.set_value(1.0)
         self.thresh_scale.set_value(0)
         self.p_smooth_scale.set_value(0.15)
+        if hasattr(self, "pen_scroll_touch_check"):
+            self.pen_scroll_touch_check.set_active(False)
+        if hasattr(self, "scroll_touch_check"):
+            self.scroll_touch_check.set_active(False)
 
     def _set_motion_scale(self, scale_val: float):
         self.hover_scale.set_value(scale_val)
@@ -2106,6 +2140,74 @@ class VeikkExpressiveWindow(Gtk.ApplicationWindow):
         self.toast_overlay.add_toast(toast)
 
 
+def _notify_daemon_reload(cfg: TabletConfig):
+    """Trigger driver live reload immediately across multiple channels."""
+    save_config(cfg)
+    try:
+        if os.access("/etc/veikk-s640/config.toml", os.W_OK):
+            save_config(cfg, "/etc/veikk-s640/config.toml")
+    except Exception:
+        pass
+    for trig_path in ("/tmp/veikk-reload", "/run/veikk-reload"):
+        try:
+            with open(trig_path, "w") as f:
+                f.write(str(time.time()))
+        except Exception:
+            pass
+    try:
+        out = subprocess.check_output(["pgrep", "-f", "veikk-s640d"]).decode().strip()
+        for pid_str in out.split():
+            import signal
+            os.kill(int(pid_str), signal.SIGHUP)
+    except Exception:
+        pass
+
+
+def handle_cli_commands() -> bool:
+    """Handle CLI switches for rapid headless scripting, shortcuts, and keybindings."""
+    args = sys.argv[1:]
+    if not args:
+        return False
+
+    if "--toggle-hover-pan" in args:
+        cfg = load_config()
+        cfg.scroll_require_touch = not cfg.scroll_require_touch
+        _notify_daemon_reload(cfg)
+        status = "DISABLED (Surface contact required)" if cfg.scroll_require_touch else "ENABLED (Air hover panning active)"
+        print(f"[✓] Hover Pan is now: {status}")
+        return True
+
+    if "--disable-hover-pan" in args:
+        cfg = load_config()
+        cfg.scroll_require_touch = True
+        _notify_daemon_reload(cfg)
+        print("[✓] Hover Pan DISABLED: Panning now requires pen contact with the tablet surface.")
+        return True
+
+    if "--enable-hover-pan" in args:
+        cfg = load_config()
+        cfg.scroll_require_touch = False
+        _notify_daemon_reload(cfg)
+        print("[✓] Hover Pan ENABLED: Panning now works while hovering the pen in the air.")
+        return True
+
+    if "--status" in args:
+        cfg = load_config()
+        hp = "Disabled (Requires contact)" if cfg.scroll_require_touch else "Enabled (Hover active)"
+        print(
+            f"VEIKK S640 Status:\n"
+            f"  Orientation: {cfg.orientation}°\n"
+            f"  Button 1: {cfg.button1_action}\n"
+            f"  Button 2: {cfg.button2_action}\n"
+            f"  Natural Scroll: {cfg.scroll_natural}\n"
+            f"  Hover Pan: {hp}\n"
+            f"  Screen Output: {cfg.screen_output}"
+        )
+        return True
+
+    return False
+
+
 # ==============================================================================
 # Application Entry Point
 # ==============================================================================
@@ -2125,6 +2227,8 @@ class VeikkExpressiveApp(Gtk.Application):
 
 
 def main():
+    if handle_cli_commands():
+        return 0
     app = VeikkExpressiveApp()
     return app.run(sys.argv)
 
