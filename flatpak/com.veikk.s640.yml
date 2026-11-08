@@ -1,0 +1,42 @@
+app-id: com.veikk.s640
+runtime: org.gnome.Platform
+runtime-version: '47'
+sdk: org.gnome.Sdk
+command: veikk-config
+
+finish-args:
+  # Display & Wayland/X11
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  # System configuration & daemon communication
+  - --filesystem=xdg-config/veikk-s640:create
+  - --filesystem=/etc/veikk-s640:create
+  - --filesystem=/tmp
+  - --filesystem=/run
+  # D-Bus APIs for live display detection and systemd reload
+  - --talk-name=org.gnome.Mutter.DisplayConfig
+  - --system-talk-name=org.freedesktop.systemd1
+
+modules:
+  - name: python3-evdev
+    buildsystem: simple
+    build-commands:
+      - pip3 install --verbose --exists-action=i --no-index --find-links="file://${PWD}" --prefix=${FLATPAK_DEST} evdev
+
+  - name: python3-pyusb
+    buildsystem: simple
+    build-commands:
+      - pip3 install --verbose --exists-action=i --no-index --find-links="file://${PWD}" --prefix=${FLATPAK_DEST} pyusb
+
+  - name: veikk-s640
+    buildsystem: simple
+    build-commands:
+      - install -d ${FLATPAK_DEST}/lib/python3.12/site-packages/veikk_s640
+      - cp -r veikk_s640/* ${FLATPAK_DEST}/lib/python3.12/site-packages/veikk_s640/
+      - install -D -m 755 tools/veikk-config-launcher ${FLATPAK_DEST}/bin/veikk-config
+      - install -D -m 644 config/veikk-config.desktop ${FLATPAK_DEST}/share/applications/com.veikk.s640.desktop
+      - install -D -m 644 config/veikk-config.png ${FLATPAK_DEST}/share/icons/hicolor/256x256/apps/com.veikk.s640.png
+    sources:
+      - type: dir
+        path: ../

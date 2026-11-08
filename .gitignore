@@ -16,3 +16,5 @@ dist/
 .system_generated/
 data/
 rnote/
+build_appdir/
+build_pyz/
